@@ -23,6 +23,8 @@ func main() {
 	switch os.Args[1] {
 	case "server":
 		os.Exit(runServer(os.Args[2:]))
+	case "admin":
+		os.Exit(runAdmin(os.Args[2:]))
 	case "version":
 		fmt.Println("opens3", version)
 	case "-h", "--help", "help":
