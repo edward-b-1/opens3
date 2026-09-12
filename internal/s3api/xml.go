@@ -514,56 +514,6 @@ type xmlCORSRule struct {
 	MaxAgeSeconds  int      `xml:"MaxAgeSeconds,omitempty"`
 }
 
-// --- lifecycle (parsed for validation and the worker) --------------------
-
-type xmlLifecycleConfiguration struct {
-	XMLName xml.Name           `xml:"LifecycleConfiguration"`
-	Xmlns   string             `xml:"xmlns,attr,omitempty"`
-	Rules   []xmlLifecycleRule `xml:"Rule"`
-}
-
-type xmlLifecycleRule struct {
-	ID         string              `xml:"ID,omitempty"`
-	Status     string              `xml:"Status"`
-	Prefix     *string             `xml:"Prefix"`
-	Filter     *xmlLifecycleFilter `xml:"Filter"`
-	Expiration *struct {
-		Days                      int    `xml:"Days,omitempty"`
-		Date                      string `xml:"Date,omitempty"`
-		ExpiredObjectDeleteMarker *bool  `xml:"ExpiredObjectDeleteMarker"`
-	} `xml:"Expiration"`
-	NoncurrentVersionExpiration *struct {
-		NoncurrentDays          int `xml:"NoncurrentDays"`
-		NewerNoncurrentVersions int `xml:"NewerNoncurrentVersions,omitempty"`
-	} `xml:"NoncurrentVersionExpiration"`
-	AbortIncompleteMultipartUpload *struct {
-		DaysAfterInitiation int `xml:"DaysAfterInitiation"`
-	} `xml:"AbortIncompleteMultipartUpload"`
-	Transitions []struct {
-		Days         int    `xml:"Days,omitempty"`
-		Date         string `xml:"Date,omitempty"`
-		StorageClass string `xml:"StorageClass"`
-	} `xml:"Transition"`
-	NoncurrentVersionTransitions []struct {
-		NoncurrentDays          int    `xml:"NoncurrentDays"`
-		StorageClass            string `xml:"StorageClass"`
-		NewerNoncurrentVersions int    `xml:"NewerNoncurrentVersions,omitempty"`
-	} `xml:"NoncurrentVersionTransition"`
-}
-
-type xmlLifecycleFilter struct {
-	Prefix                *string `xml:"Prefix"`
-	Tag                   *xmlTag `xml:"Tag"`
-	ObjectSizeGreaterThan *int64  `xml:"ObjectSizeGreaterThan"`
-	ObjectSizeLessThan    *int64  `xml:"ObjectSizeLessThan"`
-	And                   *struct {
-		Prefix                *string  `xml:"Prefix"`
-		Tags                  []xmlTag `xml:"Tag"`
-		ObjectSizeGreaterThan *int64   `xml:"ObjectSizeGreaterThan"`
-		ObjectSizeLessThan    *int64   `xml:"ObjectSizeLessThan"`
-	} `xml:"And"`
-}
-
 // --- notification --------------------------------------------------------
 
 type xmlNotificationConfiguration struct {

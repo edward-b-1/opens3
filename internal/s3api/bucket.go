@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"gitlab.com/Birdsall/opens3/internal/iam"
+	"gitlab.com/Birdsall/opens3/internal/lifecycle"
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/object"
 	"gitlab.com/Birdsall/opens3/internal/policy"
@@ -568,11 +568,11 @@ func (s *Server) putBucketLifecycle(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
-	var cfg xmlLifecycleConfiguration
-	if err := xml.Unmarshal(raw, &cfg); err != nil {
-		return errMalformedXML()
+	cfg, err := lifecycle.Parse(raw)
+	if err != nil {
+		return err
 	}
-	if err := validateLifecycle(&cfg, c.bkt); err != nil {
+	if err := lifecycle.Validate(cfg); err != nil {
 		return err
 	}
 	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.LifecycleXML = raw; return nil }); err != nil {
@@ -580,57 +580,6 @@ func (s *Server) putBucketLifecycle(c *reqCtx) error {
 	}
 	c.w.Header().Set("x-amz-transition-default-minimum-object-size", "all_storage_classes_128K")
 	c.w.WriteHeader(http.StatusOK)
-	return nil
-}
-
-func validateLifecycle(cfg *xmlLifecycleConfiguration, b *meta.Bucket) error {
-	if len(cfg.Rules) == 0 || len(cfg.Rules) > 1000 {
-		return errMalformedXML()
-	}
-	ids := map[string]bool{}
-	for _, r := range cfg.Rules {
-		if r.Status != "Enabled" && r.Status != "Disabled" {
-			return errMalformedXML()
-		}
-		if r.ID != "" {
-			if ids[r.ID] || len(r.ID) > 255 {
-				return s3err.New(s3err.InvalidArgument).WithMessage("Rule ID must be unique. Found same ID for more than one rule")
-			}
-			ids[r.ID] = true
-		}
-		if r.Prefix == nil && r.Filter == nil {
-			return errMalformedXML()
-		}
-		if r.Expiration == nil && r.NoncurrentVersionExpiration == nil && r.AbortIncompleteMultipartUpload == nil && len(r.Transitions) == 0 && len(r.NoncurrentVersionTransitions) == 0 {
-			return s3err.New(s3err.InvalidRequest).WithMessage("At least one action needs to be specified in a rule")
-		}
-		if e := r.Expiration; e != nil {
-			n := 0
-			if e.Days != 0 {
-				n++
-			}
-			if e.Date != "" {
-				n++
-			}
-			if e.ExpiredObjectDeleteMarker != nil {
-				n++
-			}
-			if n != 1 || e.Days < 0 {
-				return errMalformedXML()
-			}
-			if e.Date != "" {
-				t, err := time.Parse(time.RFC3339, e.Date)
-				if err != nil || t.Hour()+t.Minute()+t.Second() != 0 {
-					return s3err.New(s3err.InvalidArgument).WithMessage("'Date' must be at midnight GMT")
-				}
-			}
-		}
-		for _, t := range r.Transitions {
-			if !object.ValidStorageClass(t.StorageClass) {
-				return errMalformedXML()
-			}
-		}
-	}
 	return nil
 }
 
