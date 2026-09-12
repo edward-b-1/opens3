@@ -301,6 +301,9 @@ const (
 	NoSuchPolicy                                   Code = "NoSuchPolicy"
 	NoSuchGroup                                    Code = "NoSuchGroup"
 	IncompleteMultipartUpload                      Code = "IncompleteMultipartUpload"
+	AccessControlListNotSupported                  Code = "AccessControlListNotSupported"
+	NoSuchConfiguration                            Code = "NoSuchConfiguration"
+	TooManyConfigurations                          Code = "TooManyConfigurations"
 )
 
 // New returns the canonical error for code.

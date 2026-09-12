@@ -591,7 +591,9 @@ func (s *Store) AssumeRole(id *Identity, sessionPolicy json.RawMessage, duration
 	err = s.kv.Update(func(tx kv.Txn) error {
 		if id.IsRoot {
 			if _, err := getUser(tx, "root"); errors.Is(err, ErrNotFound) {
-				if err := tx.Put([]byte(nsUser+"root"), mustJSON(&User{Name: "root", Enabled: true, Created: time.Now().UTC()})); err != nil {
+				// Sessions derived from root inherit full access; the
+				// session policy (if any) narrows it.
+				if err := tx.Put([]byte(nsUser+"root"), mustJSON(&User{Name: "root", Enabled: true, Policies: []string{"consoleAdmin"}, Created: time.Now().UTC()})); err != nil {
 					return err
 				}
 			}
