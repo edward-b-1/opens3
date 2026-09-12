@@ -1,0 +1,9 @@
+/bin/
+/dist/
+/data/
+*.test
+*.out
+coverage.html
+/tests/s3tests/s3-tests/
+/tests/s3tests/results/
+.env
