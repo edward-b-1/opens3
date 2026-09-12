@@ -43,6 +43,25 @@ type Config struct {
 	Log           *slog.Logger
 }
 
+// Extension hooks let subsystems (lifecycle, notifications, admin API,
+// console) wire themselves in from their own files without editing the
+// core assembly. Register from an init() in package server.
+var (
+	extensions []func(*Server) error
+	mounts     []func(*Server, *http.ServeMux)
+	stoppers   []func(*Server)
+)
+
+// RegisterExtension adds a function run after the core stack is built.
+func RegisterExtension(f func(*Server) error) { extensions = append(extensions, f) }
+
+// RegisterMount adds a function that mounts HTTP routes on the mux before
+// the S3 API catch-all.
+func RegisterMount(f func(*Server, *http.ServeMux)) { mounts = append(mounts, f) }
+
+// RegisterStopper adds a function run on Close.
+func RegisterStopper(f func(*Server)) { stoppers = append(stoppers, f) }
+
 // Server is an assembled OpenS3 node.
 type Server struct {
 	cfg  Config
@@ -56,6 +75,10 @@ type Server struct {
 	http *http.Server
 	reg  *prometheus.Registry
 	mx   *metrics
+	// Registry is the Prometheus registry for subsystem metrics.
+	Registry *prometheus.Registry
+	// Ext holds subsystem state keyed by name (set by extensions).
+	Ext map[string]any
 }
 
 // New builds the stack. It does not listen.
@@ -100,11 +123,27 @@ func New(cfg Config) (*Server, error) {
 	}
 	obj := object.New(db, bs, k, cfg.Region, cfg.Log)
 	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID()}, cfg.Log)
-	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry()}
+	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry(), Ext: map[string]any{}}
 	s.mx = newMetrics(s.reg)
 	api.OnRequest = s.mx.observe
+	s.Registry = s.reg
+	for _, ext := range extensions {
+		if err := ext(s); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	return s, nil
 }
+
+// Config returns the configuration.
+func (s *Server) Config() Config { return s.cfg }
+
+// Log returns the logger.
+func (s *Server) Log() *slog.Logger { return s.log }
+
+// KV exposes the metadata store.
+func (s *Server) KV() kv.Store { return s.kv }
 
 func hostID() string {
 	h, _ := os.Hostname()
@@ -126,6 +165,9 @@ func (s *Server) Handler() http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/opens3/metrics", promhttp.HandlerFor(s.reg, promhttp.HandlerOpts{}))
+	for _, m := range mounts {
+		m(s, mux)
+	}
 	mux.Handle("/", s.API.Handler())
 	return mux
 }
@@ -165,6 +207,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 // Close releases resources.
 func (s *Server) Close() error {
+	for _, st := range stoppers {
+		st(s)
+	}
 	err := s.kv.Close()
 	if berr := s.blob.Close(); err == nil {
 		err = berr
