@@ -1,0 +1,15 @@
+# Mirrors the local gate (`make ci`). Runs only if the project has CI minutes.
+stages: [test, build]
+test:
+  stage: test
+  image: golang:1.27
+  script:
+    - go vet ./...
+    - go test -race ./...
+build:
+  stage: build
+  image: golang:1.27
+  script:
+    - CGO_ENABLED=0 go build -trimpath -o bin/opens3 ./cmd/opens3
+  artifacts:
+    paths: [bin/opens3]

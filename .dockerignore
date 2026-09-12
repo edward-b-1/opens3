@@ -1,0 +1,6 @@
+.git
+bin
+dist
+data
+tests/s3tests/s3-tests
+tests/s3tests/results

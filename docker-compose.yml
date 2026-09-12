@@ -1,0 +1,15 @@
+services:
+  opens3:
+    build: .
+    image: opens3:dev
+    ports:
+      - "9000:9000"
+    environment:
+      OPENS3_ROOT_USER: ${OPENS3_ROOT_USER:-opens3admin}
+      OPENS3_ROOT_PASSWORD: ${OPENS3_ROOT_PASSWORD:?set OPENS3_ROOT_PASSWORD}
+      OPENS3_MASTER_KEY: ${OPENS3_MASTER_KEY:-}
+    volumes:
+      - opens3-data:/data
+    restart: unless-stopped
+volumes:
+  opens3-data:
