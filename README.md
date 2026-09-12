@@ -6,9 +6,13 @@ OpenS3 aims for the complete Amazon S3 API as it exists today, verified by
 differential testing against AWS, in a single static binary with no
 external dependencies, with every feature in the open-source build.
 
-**Status:** phase 1 (core object store) in development. Not yet usable.
-See `docs/PLAN.md` for the roadmap and `docs/SURVEY.md` for the survey of
-S3, MinIO and the alternatives that motivates the project.
+**Status:** phase 1 complete (September 2026): single-node object store
+with versioning, multipart, object lock, SSE, IAM and policies, lifecycle,
+notifications, admin API and CLI, web console. 598 of 637 Ceph s3-tests
+pass (`docs/CONFORMANCE.md`); 95 of 117 S3 operations are implemented
+(`docs/API-COVERAGE.md`). Not yet distributed or erasure-coded: that is
+phase 4. Roadmap in `docs/PLAN.md`; the survey that motivates the project
+in `docs/SURVEY.md`.
 
 ## Why
 
@@ -18,13 +22,29 @@ something: Garage has no versioning or object lock, RustFS has a poor
 security record, SeaweedFS went open-core, Ceph needs a rack. OpenS3's
 commitments are written down in `GOVERNANCE.md`.
 
-## Quick start (once phase 1 lands)
+## Quick start
 
 ```sh
+make build
 export OPENS3_ROOT_USER=admin OPENS3_ROOT_PASSWORD=change-me-now
-opens3 server --root /var/lib/opens3 --address :9000
+bin/opens3 server --root /var/lib/opens3 --address :9000
 aws --endpoint-url http://localhost:9000 s3 mb s3://demo
+bin/opens3 admin user add alice --secret alicesecret --policy readwrite
 ```
+
+The console is at http://localhost:9000/console/, health at
+`/opens3/health/ready`, Prometheus metrics at `/opens3/metrics`. Set
+`OPENS3_MASTER_KEY` in production and back it up (`docs/FORMAT.md`).
+Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
+
+## Documentation
+
+- `docs/PLAN.md` — architecture, feature matrix, roadmap
+- `docs/SURVEY.md` — Amazon S3, MinIO history, the alternatives, positioning
+- `docs/API-COVERAGE.md`, `docs/CONFORMANCE.md` — what works, measured
+- `docs/FORMAT.md` — on-disk format and recovery
+- `docs/ADMIN.md`, `docs/CONSOLE.md`, `docs/NOTIFICATIONS.md`
+- `GOVERNANCE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
 ## Building
 

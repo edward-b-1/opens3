@@ -9,8 +9,14 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
 - CI gate (no hosted CI — run before every commit): `make ci`
   (= `go vet ./... && go test -race ./...`). Integration tests in
   `tests/integration` drive a real aws-sdk-go-v2 client against an in-process server.
-- Conformance: `tests/s3tests/run.sh` runs the Ceph s3-tests suite against a
-  local server in Docker; `tests/s3tests/known-failures.txt` may only shrink.
+- Conformance: `make conformance` runs the Ceph s3-tests suite against a
+  local server in Docker (~2 min) and regenerates docs/CONFORMANCE.md;
+  `tests/s3tests/known-failures.txt` may only shrink. Run it after any
+  change to internal/s3api or internal/object. `go run ./tools/apicoverage`
+  regenerates docs/API-COVERAGE.md after router changes.
+- Subsystems wire themselves in via internal/server hooks
+  (RegisterExtension/RegisterMount/RegisterStopper) from their own file in
+  internal/server; do not grow server.go.
 - Run locally: `go run ./cmd/opens3 server --address :9000 --root ./data`
   (root credentials default to `opens3admin` / `opens3admin`, override with
   `OPENS3_ROOT_USER` / `OPENS3_ROOT_PASSWORD`).

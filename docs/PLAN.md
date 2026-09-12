@@ -98,46 +98,46 @@ SSE encrypts blobs in 64 KiB AES-256-GCM chunks so range reads stay cheap.
 Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests. Everything below is a target for the open-source build; there is no other build.
 
 ### S3 API — bucket level
-- [ ] ListBuckets, CreateBucket, DeleteBucket, HeadBucket, GetBucketLocation
-- [ ] ListObjects (v1), ListObjectsV2, ListObjectVersions, ListMultipartUploads
-- [ ] Versioning (Enabled/Suspended), delete markers, `null` version semantics
-- [ ] Bucket tagging, policy (+ PolicyStatus), ACL (canned + grants), CORS
-- [ ] Lifecycle configuration (expiration, noncurrent, abort-incomplete-MPU, delete-marker cleanup, transitions recorded as storage-class change)
-- [ ] Default encryption (SSE-S3, SSE-KMS)
-- [ ] Object Lock configuration (default retention), retention & legal hold on objects
-- [ ] Notification configuration + event delivery
-- [ ] Website, logging, replication, public-access-block, ownership-controls, request-payment, accelerate, metrics/analytics/inventory/intelligent-tiering configuration (stored + returned)
-- [ ] DeleteObjects (multi-object delete, quiet mode)
+- [x] ListBuckets, CreateBucket, DeleteBucket, HeadBucket, GetBucketLocation
+- [x] ListObjects (v1), ListObjectsV2, ListObjectVersions, ListMultipartUploads
+- [x] Versioning (Enabled/Suspended), delete markers, `null` version semantics
+- [x] Bucket tagging, policy (+ PolicyStatus), ACL (canned + grants), CORS
+- [x] Lifecycle configuration (expiration, noncurrent, abort-incomplete-MPU, delete-marker cleanup, transitions recorded as storage-class change)
+- [x] Default encryption (SSE-S3, SSE-KMS)
+- [x] Object Lock configuration (default retention), retention & legal hold on objects
+- [x] Notification configuration + event delivery
+- [x] Website, logging, replication, public-access-block, ownership-controls, request-payment, accelerate, metrics/analytics/inventory/intelligent-tiering configuration (stored + returned)
+- [x] DeleteObjects (multi-object delete, quiet mode)
 
 ### S3 API — object level
-- [ ] PutObject, GetObject, HeadObject, DeleteObject, CopyObject
-- [ ] Range, conditional GET (If-Match/None-Match/Modified-Since/Unmodified-Since)
-- [ ] Conditional writes (If-None-Match: *, If-Match on PUT/Complete)
-- [ ] Multipart: Create/UploadPart/UploadPartCopy/Complete/Abort/ListParts
-- [ ] Checksums: CRC32, CRC32C, SHA1, SHA256, CRC64NVME; full-object and composite; trailing checksums (aws-chunked)
-- [ ] Object tagging, ACL, metadata, storage class, response-* header overrides
-- [ ] GetObjectAttributes
-- [ ] SSE-S3, SSE-KMS (local KMS), SSE-C (incl. copy source SSE-C)
-- [ ] POST object (browser form upload with policy)
-- [ ] Presigned URLs (GET/PUT/any, SigV4 query auth)
+- [x] PutObject, GetObject, HeadObject, DeleteObject, CopyObject
+- [x] Range, conditional GET (If-Match/None-Match/Modified-Since/Unmodified-Since)
+- [x] Conditional writes (If-None-Match: *, If-Match on PUT/Complete)
+- [x] Multipart: Create/UploadPart/UploadPartCopy/Complete/Abort/ListParts
+- [x] Checksums: CRC32, CRC32C, SHA1, SHA256, CRC64NVME; full-object and composite; trailing checksums (aws-chunked)
+- [x] Object tagging, ACL, metadata, storage class, response-* header overrides
+- [x] GetObjectAttributes
+- [x] SSE-S3, SSE-KMS (local KMS), SSE-C (incl. copy source SSE-C)
+- [x] POST object (browser form upload with policy)
+- [x] Presigned URLs (GET/PUT/any, SigV4 query auth)
 - [ ] SelectObjectContent (CSV/JSON/Parquet) — phase 3
-- [ ] RestoreObject (no-op success for compatibility) — phase 2
+- [x] RestoreObject (accepted for archive classes; data is never archived so restore completes immediately)
 
 ### Auth / IAM
-- [ ] SigV4 header + query (presigned), aws-chunked signed streaming, unsigned-payload, trailers
-- [ ] SigV2 (legacy clients)
-- [ ] Root credentials, IAM users, groups, policies (AWS policy language with conditions & variables), service accounts, STS AssumeRole (temporary credentials)
-- [ ] Bucket policies + ACL evaluation (deny > allow), anonymous/public access
+- [x] SigV4 header + query (presigned), aws-chunked signed streaming, unsigned-payload, trailers
+- [x] SigV2 (legacy clients)
+- [x] Root credentials, IAM users, groups, policies (AWS policy language with conditions & variables), service accounts, STS AssumeRole (temporary credentials)
+- [x] Bucket policies + ACL evaluation (deny > allow), anonymous/public access
 - [ ] OIDC / LDAP identity providers — phase 3
 
 ### Operations
-- [ ] Single binary `opens3 server`, YAML/env/flag config, TLS
-- [ ] Admin REST API (`/opens3/admin/v1`) + `opens3 admin` CLI
-- [ ] Prometheus metrics, health/readiness endpoints, structured logs, audit log
-- [ ] Lifecycle worker, notification dispatcher (webhook; NATS/Kafka/AMQP/MQTT/Redis targets phase 2)
+- [x] Single binary `opens3 server`, YAML/env/flag config, TLS
+- [x] Admin REST API (`/opens3/admin/v1`) + `opens3 admin` CLI
+- [x] Prometheus metrics, health/readiness endpoints, structured logs, audit log
+- [x] Lifecycle worker, notification dispatcher (webhook; NATS/Kafka/AMQP/MQTT/Redis targets phase 2)
 - [ ] Bucket replication worker (async to remote S3) — phase 2
 - [ ] Bucket quotas — phase 2
-- [ ] Embedded web console — phase 3
+- [x] Embedded web console (`/console/`, phase 1 per the survey)
 - [ ] Distributed mode: erasure coding (Reed-Solomon), bitrot detection, self-healing, rolling upgrades — phase 4
 - [ ] Tiering to remote S3 / cold storage — phase 4
 - [ ] S3 Tables / Iceberg catalog — phase 5
@@ -146,9 +146,9 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 0 | Plan, scaffolding, CI gate, conformance harness | this commit |
-| 1 | Core object store: buckets, objects, versioning, multipart, SigV4, IAM/policies, listing, tagging, ACL, lifecycle/CORS/policy configs, SSE, object lock, checksums, notifications (webhook), admin API, metrics | in progress |
-| 2 | Replication, quotas, more notification targets, RestoreObject, s3-tests green on all applicable groups | |
+| 0 | Plan, scaffolding, CI gate, conformance harness | done |
+| 1 | Core object store: buckets, objects, versioning, multipart, SigV4, IAM/policies, listing, tagging, ACL, lifecycle/CORS/policy configs, SSE, object lock, checksums, notifications (webhook), admin API, metrics, console, conformance harness | done 12 Sep 2026: 598/637 s3-tests passing, aws-sdk-go-v2 suite green |
+| 2 | Replication worker, bucket quotas, website endpoint serving, access-log delivery, audit log, inventory reports, more notification targets, remaining s3-tests failures, `opens3 fsck`/export tool | next |
 | 3 | SelectObjectContent, OIDC/LDAP, console UI | |
 | 4 | Distributed/erasure-coded backend, healing, tiering | |
 | 5 | S3 Tables/Iceberg, batch operations | |
@@ -157,7 +157,10 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
 
 - `go test ./...` — unit tests for every package plus in-process integration
   tests that drive a real `aws-sdk-go-v2` S3 client against `httptest`.
-- `tests/s3tests/run.sh` — runs the Ceph `s3-tests` suite (boto3) against a
-  local server in Docker; the list of known-failing tests lives in
-  `tests/s3tests/known-failures.txt` and must only shrink.
+- `make conformance` — runs the Ceph `s3-tests` suite (boto3) against a
+  local server in Docker and regenerates `docs/CONFORMANCE.md`; the list of
+  known-failing tests lives in `tests/s3tests/known-failures.txt` with a
+  reason per entry and must only shrink.
+- `go run ./tools/apicoverage` — regenerates `docs/API-COVERAGE.md`, the
+  per-operation implementation matrix.
 - `tests/cli/run.sh` — smoke tests with the `aws` CLI and `mc` (if installed).
