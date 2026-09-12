@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gitlab.com/Birdsall/opens3/internal/iam"
 	"gitlab.com/Birdsall/opens3/internal/kms"
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/object"
+	"gitlab.com/Birdsall/opens3/internal/s3err"
 )
 
 // Config for the API server.
@@ -30,6 +32,11 @@ type Config struct {
 	HostID string
 	// RequireTLSForSSEC rejects SSE-C over plaintext connections (AWS does).
 	RequireTLSForSSEC bool
+	// DefaultOwnership is the Object Ownership setting applied to buckets
+	// created without x-amz-object-ownership. AWS defaults to
+	// BucketOwnerEnforced (ACLs disabled); set ObjectWriter for legacy
+	// ACL-based tooling and the Ceph s3-tests suite.
+	DefaultOwnership string
 }
 
 // Server serves the S3 API.
@@ -169,6 +176,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.writeError(c, errNotImplemented("operation not supported"))
 		return
 	}
+	if !utf8.ValidString(c.key) || !utf8.ValidString(c.bucket) {
+		s.writeError(c, s3err.New(s3err.InvalidURI))
+		return
+	}
 	// CORS preflight needs no auth.
 	if c.op.name == "PreflightOptions" {
 		s.handlePreflight(c)
@@ -179,6 +190,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.authorize(c); err != nil {
+		s.applyCORS(c)
 		s.writeError(c, err)
 		return
 	}

@@ -40,7 +40,10 @@ type Config struct {
 	EnforceRegion bool
 	NoFsync       bool
 	AccountID     string
-	Log           *slog.Logger
+	// DefaultOwnership for new buckets: BucketOwnerEnforced (AWS default,
+	// ACLs disabled) or ObjectWriter / BucketOwnerPreferred (ACLs enabled).
+	DefaultOwnership string
+	Log              *slog.Logger
 }
 
 // Extension hooks let subsystems (lifecycle, notifications, admin API,
@@ -122,7 +125,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	obj := object.New(db, bs, k, cfg.Region, cfg.Log)
-	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID()}, cfg.Log)
+	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID(), DefaultOwnership: cfg.DefaultOwnership}, cfg.Log)
 	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry(), Ext: map[string]any{}}
 	s.mx = newMetrics(s.reg)
 	api.OnRequest = s.mx.observe
@@ -234,6 +237,7 @@ func ConfigFromEnv(cfg Config) Config {
 	cfg.TLSCert = get("TLS_CERT", cfg.TLSCert)
 	cfg.TLSKey = get("TLS_KEY", cfg.TLSKey)
 	cfg.AccountID = get("ACCOUNT_ID", cfg.AccountID)
+	cfg.DefaultOwnership = get("DEFAULT_OBJECT_OWNERSHIP", cfg.DefaultOwnership)
 	if d := get("DOMAINS", ""); d != "" {
 		cfg.Domains = strings.Split(d, ",")
 	}

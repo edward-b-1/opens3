@@ -275,12 +275,25 @@ func verifyDigests(h *hashing, expectedMD5, expectedSHA string, cr *ChecksumRequ
 		return &meta.Checksum{Algorithm: h.alg, Value: got, Type: checksum.FullObject}, nil
 	}
 	if _, err := checksum.Decode(h.alg, want); err != nil {
-		return nil, s3err.New(s3err.InvalidRequest).WithMessage("Value for x-amz-checksum-%s header is invalid.", strings.ToLower(h.alg))
+		return nil, s3err.New(s3err.BadDigest).WithMessage("Value for x-amz-checksum-%s header is invalid.", strings.ToLower(h.alg))
 	}
 	if got != want {
 		return nil, s3err.New(s3err.BadDigest).WithMessage("The %s you specified did not match the calculated checksum.", h.alg)
 	}
 	return &meta.Checksum{Algorithm: h.alg, Value: got, Type: checksum.FullObject}, nil
+}
+
+// grantsFullControl reports whether acl grants FULL_CONTROL to the user id.
+func grantsFullControl(acl *meta.ACL, id string) bool {
+	if acl == nil {
+		return false
+	}
+	for _, g := range acl.Grants {
+		if g.GranteeType == "CanonicalUser" && g.Grantee == id && g.Permission == "FULL_CONTROL" {
+			return true
+		}
+	}
+	return false
 }
 
 func applyAttrs(o *meta.Object, a ObjectAttrs) {
@@ -402,8 +415,19 @@ func (s *Service) PutObject(ctx context.Context, actor Actor, in PutInput) (*met
 		part.Checksum = cs.Value
 	}
 	seq := s.seq.Next()
+	owner, ownerDisplay := actor.CanonicalID, actor.DisplayName
+	if b.Ownership == "BucketOwnerEnforced" && b.Owner != "" {
+		// ACLs disabled: the bucket owner owns every object.
+		owner, ownerDisplay = b.Owner, b.OwnerDisplay
+	}
+	if b.Ownership == "BucketOwnerPreferred" && b.Owner != owner && grantsFullControl(in.Attrs.ACL, b.Owner) {
+		// bucket-owner-full-control under BucketOwnerPreferred transfers
+		// ownership to the bucket owner.
+		owner, ownerDisplay = b.Owner, b.OwnerDisplay
+		in.Attrs.ACL.Owner, in.Attrs.ACL.OwnerDisplay = owner, ownerDisplay
+	}
 	o := &meta.Object{Bucket: in.Bucket, Key: in.Key, Seq: seq, Size: part.Size, ETag: part.ETag, ModTime: time.Now().UTC(),
-		Owner: actor.CanonicalID, OwnerDisplay: actor.DisplayName, Parts: []meta.Part{part}, Checksum: cs}
+		Owner: owner, OwnerDisplay: ownerDisplay, Parts: []meta.Part{part}, Checksum: cs}
 	applyAttrs(o, in.Attrs)
 	if enc != nil {
 		o.SSE = enc.info

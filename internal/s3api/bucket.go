@@ -3,6 +3,7 @@ package s3api
 import (
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,7 +88,10 @@ func (s *Server) createBucket(c *reqCtx) error {
 		return errInvalidArg("Invalid x-amz-object-ownership value")
 	}
 	if in.Ownership == "" {
-		in.Ownership = "BucketOwnerEnforced"
+		in.Ownership = s.cfg.DefaultOwnership
+		if in.Ownership == "" {
+			in.Ownership = "BucketOwnerEnforced"
+		}
 	}
 	tmp := &meta.Bucket{Ownership: in.Ownership, Owner: c.actor().CanonicalID, OwnerDisplay: c.actor().DisplayName}
 	acl, err := s.parseACLHeaders(c, tmp)
@@ -100,6 +104,14 @@ func (s *Server) createBucket(c *reqCtx) error {
 	}
 	b, err := s.obj.CreateBucket(c.r.Context(), c.actor(), in)
 	if err != nil {
+		// "For legacy compatibility, if you re-create an existing bucket
+		// that you already own in the North Virginia Region, Amazon S3
+		// returns 200 OK" (CreateBucket API reference, BucketAlreadyOwnedByYou).
+		if region == "us-east-1" && errors.Is(err, s3err.New(s3err.BucketAlreadyOwnedByYou)) {
+			c.w.Header().Set("Location", "/"+c.bucket)
+			c.w.WriteHeader(http.StatusOK)
+			return nil
+		}
 		return err
 	}
 	loc := "/" + b.Name
@@ -146,7 +158,9 @@ func (s *Server) listObjectsV1(c *reqCtx) error {
 		return errInvalidArg("Invalid Encoding Method specified in Request")
 	}
 	opt := meta.ListOptions{Prefix: q.Get("prefix"), Delimiter: q.Get("delimiter"), StartAfter: q.Get("marker"), MaxKeys: maxKeys}
-	res := xmlListBucketResult{Xmlns: s3NS, Name: c.bucket, Prefix: encodeKey(opt.Prefix, encode), MaxKeys: maxKeys, Delimiter: encodeKey(opt.Delimiter, encode)}
+	// ListObjects (v1) returns Prefix verbatim even with encoding-type=url
+	// (SDKs decode Delimiter, Marker, NextMarker, Key and CommonPrefixes only).
+	res := xmlListBucketResult{Xmlns: s3NS, Name: c.bucket, Prefix: opt.Prefix, MaxKeys: maxKeys, Delimiter: encodeKey(opt.Delimiter, encode)}
 	marker := encodeKey(opt.StartAfter, encode)
 	res.Marker = &marker
 	if encode {
@@ -192,7 +206,11 @@ func (s *Server) listObjectsV2(c *reqCtx) error {
 	}
 	opt := meta.ListOptions{Prefix: q.Get("prefix"), Delimiter: q.Get("delimiter"), StartAfter: startAfter, MaxKeys: maxKeys}
 	res := xmlListBucketResult{Xmlns: s3NS, Name: c.bucket, Prefix: encodeKey(opt.Prefix, encode), MaxKeys: maxKeys, Delimiter: encodeKey(opt.Delimiter, encode),
-		StartAfter: encodeKey(q.Get("start-after"), encode), ContinuationToken: token}
+		StartAfter: encodeKey(q.Get("start-after"), encode)}
+	if has(q, "continuation-token") {
+		// Echoed whenever the parameter was sent, even when empty.
+		res.ContinuationToken = &token
+	}
 	if encode {
 		res.EncodingType = "url"
 	}
@@ -385,10 +403,14 @@ func (s *Server) getBucketPolicy(c *reqCtx) error {
 	if len(c.bkt.Policy) == 0 {
 		return s3err.New(s3err.NoSuchBucketPolicy)
 	}
+	body := []byte(c.bkt.PolicyText)
+	if len(body) == 0 {
+		body = c.bkt.Policy
+	}
 	c.w.Header().Set("Content-Type", "application/json")
-	c.w.Header().Set("Content-Length", strconv.Itoa(len(c.bkt.Policy)))
+	c.w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	c.w.WriteHeader(http.StatusOK)
-	c.w.Write(c.bkt.Policy)
+	c.w.Write(body)
 	return nil
 }
 
@@ -407,6 +429,11 @@ func (s *Server) putBucketPolicy(c *reqCtx) error {
 	if err != nil {
 		return s3err.New(s3err.MalformedPolicy).WithMessage("%s", strings.TrimPrefix(err.Error(), "policy: malformed policy document: "))
 	}
+	for _, st := range doc.Statements {
+		if st.Effect == policy.Allow && st.NotPrincipal != nil {
+			return s3err.New(s3err.MalformedPolicy).WithMessage("NotPrincipal cannot be used with an Allow effect")
+		}
+	}
 	if err := policy.ValidateBucketPolicy(doc, c.bucket); err != nil {
 		return s3err.New(s3err.MalformedPolicy).WithMessage("%s", strings.TrimPrefix(err.Error(), "policy: malformed policy document: "))
 	}
@@ -414,7 +441,7 @@ func (s *Server) putBucketPolicy(c *reqCtx) error {
 		return s3err.New(s3err.AccessDenied).WithMessage("Bucket policy contains public statements and BlockPublicPolicy is enabled")
 	}
 	var compact json.RawMessage = raw
-	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Policy = compact; return nil }); err != nil {
+	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Policy = compact; b.PolicyText = string(raw); return nil }); err != nil {
 		return err
 	}
 	c.w.WriteHeader(http.StatusNoContent)
@@ -422,7 +449,7 @@ func (s *Server) putBucketPolicy(c *reqCtx) error {
 }
 
 func (s *Server) deleteBucketPolicy(c *reqCtx) error {
-	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Policy = nil; return nil }); err != nil {
+	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Policy, b.PolicyText = nil, ""; return nil }); err != nil {
 		return err
 	}
 	c.w.WriteHeader(http.StatusNoContent)
@@ -430,13 +457,19 @@ func (s *Server) deleteBucketPolicy(c *reqCtx) error {
 }
 
 func (s *Server) getBucketPolicyStatus(c *reqCtx) error {
-	if len(c.bkt.Policy) == 0 {
-		return s3err.New(s3err.NoSuchBucketPolicy)
+	// The status reflects both the bucket policy and the bucket ACL.
+	pub := false
+	if len(c.bkt.Policy) > 0 {
+		doc, err := policy.Parse(c.bkt.Policy)
+		pub = err == nil && doc.IsPublic()
+		if pab := c.bkt.PublicAccessBlock; pab != nil && pab.RestrictPublicBuckets {
+			pub = false
+		}
 	}
-	doc, err := policy.Parse(c.bkt.Policy)
-	pub := err == nil && doc.IsPublic()
-	if pab := c.bkt.PublicAccessBlock; pab != nil && pab.RestrictPublicBuckets {
-		pub = false
+	if c.bkt.Ownership != "BucketOwnerEnforced" && isPublicACL(c.bkt.ACL) {
+		if pab := c.bkt.PublicAccessBlock; pab == nil || !pab.IgnorePublicAcls {
+			pub = true
+		}
 	}
 	return s.writeXML(c, http.StatusOK, xmlPolicyStatus{Xmlns: s3NS, IsPublic: pub})
 }
@@ -454,7 +487,7 @@ func (s *Server) getBucketACL(c *reqCtx) error {
 func (s *Server) putBucketACL(c *reqCtx) error {
 	if c.bkt.Ownership == "BucketOwnerEnforced" {
 		canned := c.r.Header.Get("x-amz-acl")
-		if canned == "private" || canned == "" && c.r.ContentLength <= 0 {
+		if canned == "bucket-owner-full-control" || canned == "" && c.r.ContentLength <= 0 {
 			c.w.WriteHeader(http.StatusOK)
 			return nil
 		}
@@ -686,7 +719,13 @@ func (s *Server) putObjectLockConfig(c *reqCtx) error {
 	var cfg *meta.ObjectLockConfig
 	if in.Rule != nil {
 		d := in.Rule.DefaultRetention
-		if d.Mode != "GOVERNANCE" && d.Mode != "COMPLIANCE" || (d.Days > 0) == (d.Years > 0) || d.Days < 0 || d.Years < 0 {
+		if d.Mode != "GOVERNANCE" && d.Mode != "COMPLIANCE" {
+			return errMalformedXML()
+		}
+		if d.Days < 0 || d.Years < 0 || (d.Days == 0 && d.Years == 0) || d.Years > 100 || d.Days > 36500 {
+			return s3err.New(s3err.InvalidRetentionPeriod)
+		}
+		if d.Days > 0 && d.Years > 0 {
 			return errMalformedXML()
 		}
 		cfg = &meta.ObjectLockConfig{Mode: d.Mode, Days: d.Days, Years: d.Years}
@@ -948,6 +987,13 @@ func (s *Server) putOwnershipControls(c *reqCtx) error {
 	default:
 		return errMalformedXML()
 	}
+	if v == "BucketOwnerEnforced" && c.bkt.ACL != nil {
+		for _, g := range c.bkt.ACL.Grants {
+			if g.GranteeType != "CanonicalUser" || g.Grantee != c.bkt.Owner {
+				return s3err.New(s3err.InvalidBucketAclWithObjectOwnership)
+			}
+		}
+	}
 	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Ownership = v; return nil }); err != nil {
 		return err
 	}
@@ -956,7 +1002,7 @@ func (s *Server) putOwnershipControls(c *reqCtx) error {
 }
 
 func (s *Server) deleteOwnershipControls(c *reqCtx) error {
-	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Ownership = "ObjectWriter"; return nil }); err != nil {
+	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Ownership = ""; return nil }); err != nil {
 		return err
 	}
 	c.w.WriteHeader(http.StatusNoContent)

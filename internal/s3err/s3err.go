@@ -112,6 +112,9 @@ var table = map[Code]def{
 	InvalidPartOrder:                        {http.StatusBadRequest, "The list of parts was not in ascending order. Parts list must be specified in order by part number."},
 	InvalidPolicyDocument:                   {http.StatusBadRequest, "The content of the form does not meet the conditions specified in the policy document."},
 	InvalidRange:                            {http.StatusRequestedRangeNotSatisfiable, "The requested range is not satisfiable"},
+	AccessControlListNotSupported:           {http.StatusBadRequest, "The bucket does not allow ACLs"},
+	InvalidBucketAclWithObjectOwnership:     {http.StatusBadRequest, "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting"},
+	InvalidRetentionPeriod:                  {http.StatusBadRequest, "The retention period specified is invalid"},
 	InvalidRequest:                          {http.StatusBadRequest, "Invalid Request"},
 	InvalidSecurity:                         {http.StatusForbidden, "The provided security credentials are not valid."},
 	InvalidStorageClass:                     {http.StatusBadRequest, "The storage class you specified is not valid."},
@@ -227,6 +230,7 @@ const (
 	InvalidPolicyDocument                          Code = "InvalidPolicyDocument"
 	InvalidRange                                   Code = "InvalidRange"
 	InvalidRequest                                 Code = "InvalidRequest"
+	InvalidRetentionPeriod                         Code = "InvalidRetentionPeriod"
 	InvalidSecurity                                Code = "InvalidSecurity"
 	InvalidStorageClass                            Code = "InvalidStorageClass"
 	InvalidTag                                     Code = "InvalidTag"
@@ -302,6 +306,7 @@ const (
 	NoSuchGroup                                    Code = "NoSuchGroup"
 	IncompleteMultipartUpload                      Code = "IncompleteMultipartUpload"
 	AccessControlListNotSupported                  Code = "AccessControlListNotSupported"
+	InvalidBucketAclWithObjectOwnership            Code = "InvalidBucketAclWithObjectOwnership"
 	NoSuchConfiguration                            Code = "NoSuchConfiguration"
 	TooManyConfigurations                          Code = "TooManyConfigurations"
 )

@@ -100,6 +100,9 @@ func (r *xmlCORSRule) apply(h http.Header, origin string) {
 		}
 	}
 	h.Set("Access-Control-Allow-Origin", allow)
+	if len(r.AllowedMethods) > 0 {
+		h.Set("Access-Control-Allow-Methods", strings.Join(r.AllowedMethods, ", "))
+	}
 	if allow != "*" {
 		h.Set("Access-Control-Allow-Credentials", "true")
 		h.Add("Vary", "Origin")

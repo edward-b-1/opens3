@@ -29,7 +29,11 @@ func TestBucketLifecycle(t *testing.T) {
 	if _, err := e.s3.HeadBucket(e.ctx, &s3.HeadBucketInput{Bucket: aws.String("gamma")}); httpStatus(err) != 404 {
 		t.Fatalf("head missing: %v", err)
 	}
-	if _, err := e.s3.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("alpha")}); errCode(err) != "BucketAlreadyOwnedByYou" {
+	// The server runs as us-east-1: "For legacy compatibility, if you
+	// re-create an existing bucket that you already own in the North
+	// Virginia Region, Amazon S3 returns 200 OK" (CreateBucket API
+	// reference, error BucketAlreadyOwnedByYou). Other regions return 409.
+	if _, err := e.s3.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("alpha")}); err != nil {
 		t.Fatalf("dup: %v", err)
 	}
 	if _, err := e.s3.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("Bad")}); errCode(err) != "InvalidBucketName" {
@@ -197,7 +201,9 @@ func TestListing(t *testing.T) {
 	// encoding-type=url.
 	e.put("list", "sp ace+plus", "x")
 	l, _ = e.s3.ListObjectsV2(e.ctx, &s3.ListObjectsV2Input{Bucket: aws.String("list"), Prefix: aws.String("sp"), EncodingType: types.EncodingTypeUrl})
-	if len(l.Contents) != 1 || (*l.Contents[0].Key != "sp ace+plus" && *l.Contents[0].Key != "sp+ace%2Bplus") {
+	// S3 percent-encodes everything but unreserved characters and '/'
+	// ("sp%20ace%2Bplus"); the SDK decodes it back to the raw key.
+	if len(l.Contents) != 1 || (*l.Contents[0].Key != "sp ace+plus" && *l.Contents[0].Key != "sp%20ace%2Bplus") {
 		t.Fatalf("encoding: %q", *l.Contents[0].Key)
 	}
 }

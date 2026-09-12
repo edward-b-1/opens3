@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 
 	"gitlab.com/Birdsall/opens3/internal/blob"
 	"gitlab.com/Birdsall/opens3/internal/kv"
@@ -81,6 +82,9 @@ func (s *Service) GetObject(ctx context.Context, in GetInput) (*GetResult, error
 	if err := checkReadConditions(o, in.Conditions); err != nil {
 		return nil, err
 	}
+	if in.PartNumber > len(o.Parts) {
+		return nil, s3err.New(s3err.InvalidPart).WithMessage("The requested partnumber is not satisfiable").WithExtra("PartNumberRequested", strconv.Itoa(in.PartNumber)).WithExtra("ActualPartCount", strconv.Itoa(len(o.Parts)))
+	}
 	if o.SSE != nil && o.SSE.Type == "SSE-C" && in.SSE.CustomerKey == nil {
 		return nil, s3err.New(s3err.InvalidRequest).WithMessage("The object was stored using a form of Server Side Encryption. The correct parameters must be provided to retrieve the object.")
 	}
@@ -95,7 +99,7 @@ func (s *Service) GetObject(ctx context.Context, in GetInput) (*GetResult, error
 	start, end := int64(0), o.Size-1
 	if in.PartNumber > 0 {
 		if in.PartNumber > len(o.Parts) {
-			return nil, s3err.New(s3err.InvalidRange).WithMessage("The requested partnumber is not satisfiable")
+			return nil, s3err.New(s3err.InvalidPart).WithMessage("The requested partnumber is not satisfiable").WithExtra("PartNumberRequested", strconv.Itoa(in.PartNumber)).WithExtra("ActualPartCount", strconv.Itoa(len(o.Parts)))
 		}
 		var off int64
 		for i := 0; i < in.PartNumber-1; i++ {

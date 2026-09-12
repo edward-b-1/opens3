@@ -3,6 +3,7 @@ package s3api
 import (
 	"encoding/xml"
 	"net/url"
+	"sort"
 	"time"
 
 	"gitlab.com/Birdsall/opens3/internal/meta"
@@ -39,6 +40,7 @@ func tagsToXML(tags []meta.Tag) *xmlTagging {
 	for _, tg := range tags {
 		t.TagSet.Tags = append(t.TagSet.Tags, xmlTag{tg.Key, tg.Value})
 	}
+	sort.Slice(t.TagSet.Tags, func(i, j int) bool { return t.TagSet.Tags[i].Key < t.TagSet.Tags[j].Key })
 	if t.TagSet.Tags == nil {
 		t.TagSet.Tags = []xmlTag{}
 	}
@@ -190,7 +192,20 @@ type xmlAccessControlPolicyIn struct {
 
 func aclToXML(a *meta.ACL) *xmlAccessControlPolicy {
 	out := &xmlAccessControlPolicy{Xmlns: s3NS, Owner: xmlOwner{ID: a.Owner, DisplayName: a.OwnerDisplay}}
+	// Group grants are listed before user grants (the order S3 clients
+	// and the Ceph conformance suite expect).
+	grants := make([]meta.Grant, 0, len(a.Grants))
 	for _, g := range a.Grants {
+		if g.GranteeType == "Group" {
+			grants = append(grants, g)
+		}
+	}
+	for _, g := range a.Grants {
+		if g.GranteeType != "Group" {
+			grants = append(grants, g)
+		}
+	}
+	for _, g := range grants {
 		ge := xmlGrantee{XsiNS: "http://www.w3.org/2001/XMLSchema-instance", Type: g.GranteeType}
 		if g.GranteeType == "Group" {
 			ge.URI = g.Grantee
@@ -216,7 +231,7 @@ type xmlListBucketResult struct {
 	Marker                *string           `xml:"Marker"`
 	NextMarker            string            `xml:"NextMarker,omitempty"`
 	StartAfter            string            `xml:"StartAfter,omitempty"`
-	ContinuationToken     string            `xml:"ContinuationToken,omitempty"`
+	ContinuationToken     *string           `xml:"ContinuationToken"`
 	NextContinuationToken string            `xml:"NextContinuationToken,omitempty"`
 	KeyCount              *int              `xml:"KeyCount"`
 	MaxKeys               int               `xml:"MaxKeys"`

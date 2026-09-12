@@ -62,6 +62,9 @@ func (s *Server) parseGrantHeader(v, perm string) ([]meta.Grant, error) {
 		val = strings.Trim(strings.TrimSpace(val), `"`)
 		switch strings.ToLower(strings.TrimSpace(k)) {
 		case "id":
+			if !s.knownCanonicalID(val) {
+				return nil, s3err.New(s3err.InvalidArgument).WithMessage("Invalid id").WithExtra("ArgumentName", "CanonicalUser/ID").WithExtra("ArgumentValue", val)
+			}
 			out = append(out, meta.Grant{Grantee: val, GranteeType: "CanonicalUser", Permission: perm})
 		case "uri":
 			if val != groupAllUsers && val != groupAuthenticatedUsers && val != groupLogDelivery {
@@ -106,7 +109,7 @@ func (s *Server) parseACLHeaders(c *reqCtx, b *meta.Bucket) (*meta.ACL, error) {
 	}
 	if b != nil && b.Ownership == "BucketOwnerEnforced" {
 		// ACLs disabled: only bucket-owner-full-control / private allowed.
-		if canned != "" && canned != "private" && canned != "bucket-owner-full-control" || len(grants) > 0 {
+		if canned != "" && canned != "bucket-owner-full-control" || len(grants) > 0 {
 			return nil, s3err.New(s3err.AccessControlListNotSupported)
 		}
 		return nil, nil
@@ -138,6 +141,9 @@ func (s *Server) aclFromXML(in *xmlAccessControlPolicyIn, owner string) (*meta.A
 			if g.Grantee.ID == "" {
 				return nil, s3err.New(s3err.MalformedACLError)
 			}
+			if !s.knownCanonicalID(g.Grantee.ID) {
+				return nil, s3err.New(s3err.InvalidArgument).WithMessage("Invalid id").WithExtra("ArgumentName", "CanonicalUser/ID").WithExtra("ArgumentValue", g.Grantee.ID)
+			}
 			acl.Grants = append(acl.Grants, meta.Grant{Grantee: g.Grantee.ID, GranteeType: "CanonicalUser", DisplayName: g.Grantee.DisplayName, Permission: g.Permission})
 		case "Group":
 			if g.Grantee.URI != groupAllUsers && g.Grantee.URI != groupAuthenticatedUsers && g.Grantee.URI != groupLogDelivery {
@@ -151,6 +157,24 @@ func (s *Server) aclFromXML(in *xmlAccessControlPolicyIn, owner string) (*meta.A
 		}
 	}
 	return acl, nil
+}
+
+// knownCanonicalID reports whether id is the canonical ID of an existing
+// identity (AWS rejects grants to unknown IDs with InvalidArgument).
+func (s *Server) knownCanonicalID(id string) bool {
+	if id == iam.CanonicalID("root") {
+		return true
+	}
+	users, err := s.iam.ListUsers()
+	if err != nil {
+		return true // fail open: cannot verify
+	}
+	for _, u := range users {
+		if iam.CanonicalID(u.Name) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // isPublicACL reports whether an ACL grants anything to AllUsers or

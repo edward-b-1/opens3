@@ -2,6 +2,8 @@ package s3api
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
+	"gitlab.com/Birdsall/opens3/internal/checksum"
 	"gitlab.com/Birdsall/opens3/internal/iam"
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/object"
@@ -46,7 +49,7 @@ func (s *Server) postObject(c *reqCtx) error {
 			return s3err.New(s3err.MalformedPOSTRequest)
 		}
 		name := p.FormName()
-		if p.FileName() != "" || name == "file" {
+		if strings.EqualFold(name, "file") {
 			filePart = p
 			fileName = p.FileName()
 			break // "file" must be the last field
@@ -65,12 +68,19 @@ func (s *Server) postObject(c *reqCtx) error {
 		return s3err.New(s3err.UserKeyMustBeSpecified).WithMessage("Bucket POST must contain a field named 'key'.  If it is specified, please check the order of the fields.")
 	}
 	key = strings.ReplaceAll(key, "${filename}", fileName)
+	fields["key"] = key
 	c.key = key
 
 	// Authentication via policy.
 	policyB64 := fields["policy"]
 	if policyB64 != "" {
-		if err := s.verifyPostPolicy(c, fields, policyB64); err != nil {
+		var err error
+		if fields["awsaccesskeyid"] != "" && fields["x-amz-credential"] == "" {
+			err = s.verifyPostPolicyV2(c, fields, policyB64)
+		} else {
+			err = s.verifyPostPolicy(c, fields, policyB64)
+		}
+		if err != nil {
 			return err
 		}
 	} else {
@@ -92,14 +102,23 @@ func (s *Server) postObject(c *reqCtx) error {
 		if err := json.Unmarshal(raw, &pol); err != nil {
 			return s3err.New(s3err.InvalidPolicyDocument)
 		}
-		if exp, err := time.Parse("2006-01-02T15:04:05.000Z", pol.Expiration); err != nil || time.Now().After(exp) {
-			if err != nil {
-				if exp, err = time.Parse(time.RFC3339, pol.Expiration); err != nil || time.Now().After(exp) {
-					return s3err.New(s3err.AccessDenied).WithMessage("Invalid according to Policy: Policy expired.")
-				}
-			} else {
-				return s3err.New(s3err.AccessDenied).WithMessage("Invalid according to Policy: Policy expired.")
-			}
+		// Element names are case-sensitive and both are required.
+		var top map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &top); err != nil || top["expiration"] == nil || top["conditions"] == nil {
+			return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: Invalid or missing 'expiration' or 'conditions' element")
+		}
+		if len(pol.Conditions) == 0 {
+			return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: 'conditions' must not be empty")
+		}
+		exp, err := time.Parse("2006-01-02T15:04:05.000Z", pol.Expiration)
+		if err != nil {
+			exp, err = time.Parse(time.RFC3339, pol.Expiration)
+		}
+		if err != nil {
+			return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: Invalid 'expiration' value: '%s'", pol.Expiration)
+		}
+		if time.Now().After(exp) {
+			return s3err.New(s3err.AccessDenied).WithMessage("Invalid according to Policy: Policy expired.")
 		}
 	}
 	// Attributes from fields.
@@ -132,11 +151,30 @@ func (s *Server) postObject(c *reqCtx) error {
 		sseReq.Type = v
 		sseReq.KMSKeyID = fields["x-amz-server-side-encryption-aws-kms-key-id"]
 	}
+	if alg := fields["x-amz-server-side-encryption-customer-algorithm"]; alg != "" {
+		if alg != "AES256" {
+			return s3err.New(s3err.InvalidEncryptionAlgorithmError)
+		}
+		ck, err := base64.StdEncoding.DecodeString(fields["x-amz-server-side-encryption-customer-key"])
+		if err != nil || len(ck) != 32 {
+			return errInvalidArg("The secret key was invalid for the specified algorithm.")
+		}
+		sseReq = object.SSERequest{Type: "SSE-C", CustomerKey: ck, CustomerKeyMD5: fields["x-amz-server-side-encryption-customer-key-md5"]}
+	}
+	var cr *object.ChecksumRequest
+	for _, alg := range []string{"CRC32", "CRC32C", "SHA1", "SHA256", "CRC64NVME"} {
+		if v := fields[strings.ToLower(checksum.HeaderName(alg))]; v != "" {
+			cr = &object.ChecksumRequest{Algorithm: alg, Value: v}
+		}
+	}
 	// Stream the file, enforcing content-length-range and policy conditions.
 	var minLen, maxLen int64 = 0, object.MaxObjectSize
 	for _, cond := range pol.Conditions {
-		if l, ok := cond.([]any); ok && len(l) == 3 {
+		if l, ok := cond.([]any); ok {
 			if op, _ := l[0].(string); op == "content-length-range" {
+				if len(l) != 3 {
+					return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: content-length-range requires a minimum and a maximum")
+				}
 				minLen = toInt64(l[1])
 				maxLen = toInt64(l[2])
 			}
@@ -157,7 +195,7 @@ func (s *Server) postObject(c *reqCtx) error {
 	}
 	cnt := &countingReader{r: io.LimitReader(filePart, maxLen+1)}
 	o, err := s.obj.PutObject(r.Context(), c.actor(), object.PutInput{Bucket: c.bucket, Key: key, Body: cnt, Size: -1, ExpectedMD5: md5hex,
-		SSE: sseReq, Attrs: attrs, Event: "s3:ObjectCreated:Post"})
+		SSE: sseReq, Attrs: attrs, Checksum: cr, Event: "s3:ObjectCreated:Post"})
 	if err != nil {
 		return err
 	}
@@ -257,6 +295,33 @@ func (s *Server) verifyPostPolicy(c *reqCtx, fields map[string]string, policyB64
 	return nil
 }
 
+// verifyPostPolicyV2 checks the legacy (Signature Version 2) POST form:
+// AWSAccessKeyId plus signature = base64(HMAC-SHA1(secret, policy)).
+func (s *Server) verifyPostPolicyV2(c *reqCtx, fields map[string]string, policyB64 string) error {
+	ak, sig := fields["awsaccesskeyid"], fields["signature"]
+	if ak == "" || sig == "" {
+		return s3err.New(s3err.InvalidArgument).WithMessage("POST requires AWSAccessKeyId and signature fields")
+	}
+	secret, err := s.iam.LookupSecret(ak)
+	if err != nil {
+		return mapSigErr(err)
+	}
+	mac := hmac.New(sha1.New, []byte(secret))
+	mac.Write([]byte(policyB64))
+	want := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	if subtle.ConstantTimeCompare([]byte(want), []byte(sig)) != 1 {
+		return s3err.New(s3err.SignatureDoesNotMatch)
+	}
+	id, err := s.iam.Resolve(ak, fields["x-amz-security-token"])
+	if err != nil {
+		return mapSigErr(err)
+	}
+	c.identity = id
+	c.authType = "POST"
+	c.sigVer = "AWS"
+	return nil
+}
+
 // checkPostConditions validates the submitted fields against the policy.
 func checkPostConditions(conds []any, fields map[string]string, bucket string) error {
 	fail := func(msg string) error {
@@ -266,6 +331,9 @@ func checkPostConditions(conds []any, fields map[string]string, bucket string) e
 	for _, cond := range conds {
 		switch v := cond.(type) {
 		case map[string]any:
+			if len(v) == 0 {
+				return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: empty condition")
+			}
 			for k, val := range v {
 				k = strings.ToLower(k)
 				checked[k] = true
@@ -279,7 +347,7 @@ func checkPostConditions(conds []any, fields map[string]string, bucket string) e
 			}
 		case []any:
 			if len(v) != 3 {
-				return fail("Policy Condition malformed")
+				return s3err.New(s3err.InvalidPolicyDocument).WithMessage("Invalid Policy: malformed condition")
 			}
 			op, _ := v[0].(string)
 			field := strings.ToLower(strings.TrimPrefix(toString(v[1]), "$"))
@@ -309,7 +377,10 @@ func checkPostConditions(conds []any, fields map[string]string, bucket string) e
 			continue
 		}
 		switch k {
-		case "x-amz-algorithm", "x-amz-credential", "x-amz-date", "x-amz-security-token", "policy", "x-amz-signature":
+		case "x-amz-algorithm", "x-amz-credential", "x-amz-date", "x-amz-security-token", "policy", "x-amz-signature", "awsaccesskeyid", "signature":
+			continue
+		}
+		if strings.HasPrefix(k, "x-amz-checksum-") {
 			continue
 		}
 		if strings.HasPrefix(k, "x-ignore-") {

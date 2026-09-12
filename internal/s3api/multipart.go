@@ -1,6 +1,7 @@
 package s3api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -58,8 +59,11 @@ func (s *Server) uploadPart(c *reqCtx) error {
 		return err
 	}
 	size := c.body.size
-	if size < 0 && c.body.chunked == nil && r.ContentLength < 0 {
+	if size < 0 && c.body.chunked == nil && r.ContentLength < 0 && len(r.TransferEncoding) == 0 {
 		return s3err.New(s3err.MissingContentLength)
+	}
+	if err := requireContentLength(r); err != nil {
+		return err
 	}
 	p, err := s.obj.UploadPart(r.Context(), object.UploadPartInput{Bucket: c.bucket, Key: c.key, UploadID: q.Get("uploadId"), PartNumber: pn,
 		Body: c.body, Size: size, ExpectedMD5: md5hex, ExpectedSHA256: c.body.expectedSHA256, Checksum: cr, SSE: sseReq})
@@ -84,6 +88,8 @@ func (s *Server) uploadPart(c *reqCtx) error {
 	if sseReq.Type == "SSE-C" {
 		h.Set("x-amz-server-side-encryption-customer-algorithm", "AES256")
 		h.Set("x-amz-server-side-encryption-customer-key-MD5", sseReq.CustomerKeyMD5)
+	} else if u, err := s.obj.GetUpload(r.Context(), c.bucket, c.key, q.Get("uploadId")); err == nil && u.SSE != nil {
+		setSSEResponseHeaders(h, &meta.Object{SSE: u.SSE})
 	}
 	c.w.WriteHeader(http.StatusOK)
 	return nil
@@ -132,8 +138,15 @@ func (s *Server) uploadPartCopy(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
+	h := c.w.Header()
 	if srcBucket.Versioning != "" {
-		c.w.Header().Set("x-amz-copy-source-version-id", src.VersionID)
+		h.Set("x-amz-copy-source-version-id", src.VersionID)
+	}
+	if sseReq.Type == "SSE-C" {
+		h.Set("x-amz-server-side-encryption-customer-algorithm", "AES256")
+		h.Set("x-amz-server-side-encryption-customer-key-MD5", sseReq.CustomerKeyMD5)
+	} else if u, err := s.obj.GetUpload(r.Context(), c.bucket, c.key, q.Get("uploadId")); err == nil && u.SSE != nil {
+		setSSEResponseHeaders(h, &meta.Object{SSE: u.SSE})
 	}
 	return s.writeXML(c, http.StatusOK, xmlCopyPartResult{Xmlns: s3NS, ETag: quoteETag(p.ETag), LastModified: iso8601(src.ModTime)})
 }
@@ -142,6 +155,9 @@ func (s *Server) completeMultipartUpload(c *reqCtx) error {
 	r := c.r
 	var in xmlCompleteMultipartUpload
 	if err := s.readXML(c, &in); err != nil {
+		if errors.Is(err, s3err.New(s3err.MissingRequestBodyError)) {
+			return errMalformedXML()
+		}
 		return err
 	}
 	parts := make([]object.CompletePart, 0, len(in.Parts))
@@ -168,8 +184,12 @@ func (s *Server) completeMultipartUpload(c *reqCtx) error {
 		}
 	}
 	cond := readConditions(r, "")
+	sseReq, err := parseSSEHeaders(r, false)
+	if err != nil {
+		return err
+	}
 	o, err := s.obj.CompleteUpload(r.Context(), c.actor(), object.CompleteInput{Bucket: c.bucket, Key: c.key, UploadID: r.URL.Query().Get("uploadId"),
-		Parts: parts, Conditions: object.Conditions{IfMatch: cond.IfMatch, IfNoneMatch: cond.IfNoneMatch}, Checksum: cr, ObjectSize: objSize})
+		Parts: parts, Conditions: object.Conditions{IfMatch: cond.IfMatch, IfNoneMatch: cond.IfNoneMatch}, Checksum: cr, ObjectSize: objSize, SSE: sseReq})
 	if err != nil {
 		return err
 	}

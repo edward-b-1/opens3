@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gitlab.com/Birdsall/opens3/internal/blob"
 	"gitlab.com/Birdsall/opens3/internal/kms"
@@ -117,6 +118,9 @@ func ValidObjectKey(key string) error {
 	}
 	if strings.IndexByte(key, 0) >= 0 {
 		return s3err.New(s3err.InvalidObjectName)
+	}
+	if !utf8.ValidString(key) {
+		return s3err.New(s3err.InvalidURI)
 	}
 	return nil
 }
@@ -229,6 +233,22 @@ func (s *Service) DeleteBucket(ctx context.Context, name string) error {
 		}
 		if has {
 			return s3err.New(s3err.BucketNotEmpty)
+		}
+		// In-progress multipart uploads are not objects: AWS deletes the
+		// bucket regardless, so abort them here (their blobs go with the
+		// bucket directory below).
+		var dead [][]byte
+		for _, p := range [][]byte{meta.UploadBucketPrefix(name), []byte("ui/" + name + "/"), []byte("p/" + name + "/")} {
+			it := tx.Seek(p)
+			for ; it.Valid() && kv.HasPrefix(it.Key(), p); it.Next() {
+				dead = append(dead, append([]byte(nil), it.Key()...))
+			}
+			it.Close()
+		}
+		for _, k := range dead {
+			if err := tx.Delete(k); err != nil {
+				return err
+			}
 		}
 		return meta.DeleteBucket(tx, name)
 	})
@@ -352,13 +372,8 @@ func checkWriteConditions(tx kv.Txn, bucket, key string, c Conditions) error {
 	}
 	cur, err := meta.GetLatest(tx, bucket, key)
 	exists := err == nil && !cur.DeleteMarker
-	if c.IfNoneMatch != "" {
-		if c.IfNoneMatch != "*" {
-			return s3err.New(s3err.NotImplemented).WithMessage("If-None-Match only supports *")
-		}
-		if exists {
-			return s3err.New(s3err.PreconditionFailed)
-		}
+	if c.IfNoneMatch != "" && exists && etagMatches(c.IfNoneMatch, cur.ETag) {
+		return s3err.New(s3err.PreconditionFailed)
 	}
 	if c.IfMatch != "" {
 		if !exists {

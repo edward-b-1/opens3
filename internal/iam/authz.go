@@ -124,13 +124,15 @@ func (s *Store) Authorize(r Request) bool {
 
 // aclAllows evaluates bucket and object ACL grants.
 func aclAllows(r Request) bool {
+	id := r.Identity
+	// The bucket owner has full control of the bucket itself (AWS: the
+	// owning account), independent of ACL grants.
+	isOwner := id != nil && r.BucketOwner != "" && id.CanonicalID() == r.BucketOwner
 	if r.Ownership == "BucketOwnerEnforced" {
-		// ACLs disabled: only the owner (already handled by policies for
-		// non-root) has access; nothing else.
-		return false
+		// ACLs disabled: only the bucket owner has access; nothing else.
+		return isOwner
 	}
 	ignorePublic := r.PublicAccessBlock != nil && r.PublicAccessBlock.IgnorePublicAcls
-	id := r.Identity
 	has := func(acl *meta.ACL, owner string, perms ...string) bool {
 		if acl == nil && owner == "" {
 			return false
@@ -184,7 +186,6 @@ func aclAllows(r Request) bool {
 	case "s3:PutObjectAcl", "s3:PutObjectVersionAcl":
 		return has(r.ObjectACL, r.ObjectOwner, "WRITE_ACP")
 	}
-	// Everything else (bucket configuration) requires the owner, which for
-	// non-root identities means an explicit policy grant.
-	return false
+	// Everything else (bucket configuration) requires the bucket owner.
+	return isOwner
 }

@@ -59,6 +59,13 @@ func (s *Service) CreateUpload(ctx context.Context, actor Actor, in CreateUpload
 	}
 	u := &meta.Upload{Bucket: in.Bucket, Key: in.Key, UploadID: meta.NewID(), Initiated: time.Now().UTC(),
 		Owner: actor.CanonicalID, OwnerDisplay: actor.DisplayName, ChecksumAlgorithm: alg, ChecksumType: ctype}
+	if b.Ownership == "BucketOwnerEnforced" && b.Owner != "" {
+		u.Owner, u.OwnerDisplay = b.Owner, b.OwnerDisplay
+	}
+	if b.Ownership == "BucketOwnerPreferred" && b.Owner != actor.CanonicalID && grantsFullControl(in.Attrs.ACL, b.Owner) {
+		u.Owner, u.OwnerDisplay = b.Owner, b.OwnerDisplay
+		in.Attrs.ACL.Owner, in.Attrs.ACL.OwnerDisplay = b.Owner, b.OwnerDisplay
+	}
 	a := in.Attrs
 	u.ContentType, u.ContentEncoding, u.ContentDisposition, u.ContentLanguage = a.ContentType, a.ContentEncoding, a.ContentDisposition, a.ContentLanguage
 	u.CacheControl, u.Expires, u.WebsiteRedirect, u.UserMeta, u.Tags, u.StorageClass, u.ACL = a.CacheControl, a.Expires, a.WebsiteRedirect, a.UserMeta, a.Tags, a.StorageClass, a.ACL
@@ -111,6 +118,9 @@ func (s *Service) UploadPart(ctx context.Context, in UploadPartInput) (*meta.Par
 	}
 	u, err := s.GetUpload(ctx, in.Bucket, in.Key, in.UploadID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkSSECParams(u.SSE, in.SSE); err != nil {
 		return nil, err
 	}
 	var enc *sseParams
@@ -176,6 +186,8 @@ type CompletePart struct {
 
 // CompleteInput parameters.
 type CompleteInput struct {
+	// SSE carries the SSE-C key for uploads initiated with SSE-C.
+	SSE                   SSERequest
 	Bucket, Key, UploadID string
 	Parts                 []CompletePart
 	Conditions            Conditions
@@ -191,6 +203,9 @@ func (s *Service) CompleteUpload(ctx context.Context, actor Actor, in CompleteIn
 	}
 	u, err := s.GetUpload(ctx, in.Bucket, in.Key, in.UploadID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkSSECParams(u.SSE, in.SSE); err != nil {
 		return nil, err
 	}
 	b, err := s.GetBucket(ctx, in.Bucket)
@@ -348,6 +363,24 @@ func (s *Service) AbortUpload(ctx context.Context, bucket, key, uploadID string)
 		return err
 	}
 	s.deleteBlobs(ctx, bucket, parts)
+	return nil
+}
+
+// checkSSECParams verifies that an SSE-C upload is addressed with its
+// customer key (and that a key is not supplied for other uploads).
+func checkSSECParams(stored *meta.SSE, req SSERequest) error {
+	if stored != nil && stored.Type == "SSE-C" {
+		if req.CustomerKey == nil {
+			return s3err.New(s3err.InvalidRequest).WithMessage("The multipart upload initiate requested encryption. Subsequent part requests must include the appropriate encryption parameters.")
+		}
+		if req.CustomerKeyMD5 != "" && stored.CustomerKeyMD5 != "" && req.CustomerKeyMD5 != stored.CustomerKeyMD5 {
+			return s3err.New(s3err.InvalidRequest).WithMessage("The provided encryption parameters did not match the ones used originally.")
+		}
+		return nil
+	}
+	if req.CustomerKey != nil {
+		return s3err.New(s3err.InvalidRequest).WithMessage("The encryption parameters are not applicable to this upload.")
+	}
 	return nil
 }
 

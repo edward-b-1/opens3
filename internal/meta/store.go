@@ -72,9 +72,10 @@ func ListBuckets(tx kv.Txn) ([]*Bucket, error) {
 	return out, nil
 }
 
-// BucketHasObjects reports whether any object version or upload exists.
+// BucketHasObjects reports whether any object version exists.
 func BucketHasObjects(tx kv.Txn, name string) (bool, error) {
-	for _, p := range [][]byte{ObjectBucketPrefix(name), UploadBucketPrefix(name)} {
+	// In-progress multipart uploads are not objects; DeleteBucket aborts them.
+	for _, p := range [][]byte{ObjectBucketPrefix(name)} {
 		it := tx.Seek(p)
 		has := it.Valid() && bytes.HasPrefix(it.Key(), p)
 		it.Close()

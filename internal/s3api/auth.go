@@ -149,6 +149,16 @@ func (s *Server) authorize(c *reqCtx) error {
 		return nil
 	}
 	ctx := c.r.Context()
+	if op.name == "PostObject" {
+		// Authentication and authorisation happen in the handler once the
+		// signed policy has been read from the form.
+		b, err := s.obj.GetBucket(ctx, c.bucket)
+		if err != nil {
+			return err
+		}
+		c.bkt = b
+		return nil
+	}
 	if op.level >= 1 && op.name != "CreateBucket" {
 		b, err := s.obj.GetBucket(ctx, c.bucket)
 		if err != nil {
@@ -157,6 +167,9 @@ func (s *Server) authorize(c *reqCtx) error {
 			return err
 		}
 		c.bkt = b
+		if want := c.r.Header.Get("x-amz-expected-bucket-owner"); want != "" && want != b.Owner && want != s.iam.AccountID() {
+			return errAccessDenied()
+		}
 	}
 	if op.level == 2 && op.needsObject && c.bkt != nil {
 		vid := c.r.URL.Query().Get("versionId")
@@ -206,6 +219,21 @@ func (s *Server) authorize(c *reqCtx) error {
 		return nil
 	}
 	if !s.iam.Authorize(req) {
+		// A caller allowed to list the bucket learns that the key does not
+		// exist (404) instead of 403, as on AWS; the key is evaluated as
+		// the s3:prefix condition of the ListBucket permission.
+		if op.level == 2 && op.needsObject && c.objMeta == nil && (op.name == "GetObject" || op.name == "HeadObject") {
+			lreq := req
+			lreq.Action, lreq.Key = "s3:ListBucket", ""
+			lreq.Conditions = map[string][]string{}
+			for k, v := range req.Conditions {
+				lreq.Conditions[k] = v
+			}
+			lreq.Conditions["s3:prefix"] = []string{c.key}
+			if s.iam.Authorize(lreq) {
+				return s3err.New(s3err.NoSuchKey)
+			}
+		}
 		return errAccessDenied()
 	}
 	return nil
@@ -333,6 +361,22 @@ func (s *Server) authenticateV2(c *reqCtx) error {
 		if !ok {
 			return s3err.New(s3err.AuthorizationHeaderMalformed)
 		}
+		// x-amz-date takes precedence over Date whenever it is present.
+		ds, ok := r.Header["X-Amz-Date"]
+		if !ok {
+			ds = r.Header["Date"]
+		}
+		var t time.Time
+		if len(ds) > 0 {
+			t = parseHTTPTime(ds[0])
+		}
+		if t.IsZero() || t.Unix() < 0 {
+			return s3err.New(s3err.AccessDenied).WithMessage("AWS authentication requires a valid Date or x-amz-date header")
+		}
+		if d := time.Since(t); d > 15*time.Minute || d < -15*time.Minute {
+			return s3err.New(s3err.RequestTimeTooSkewed)
+		}
+		c.sigAge = time.Since(t)
 	}
 	secret, err := s.iam.LookupSecret(accessKey)
 	if err != nil {
@@ -402,7 +446,11 @@ func (s *Server) applyCORS(c *reqCtx) {
 	if err != nil {
 		return
 	}
-	if rule := cfg.match(origin, c.r.Method, nil); rule != nil {
+	method := c.r.Header.Get("Access-Control-Request-Method")
+	if method == "" {
+		method = c.r.Method
+	}
+	if rule := cfg.match(origin, method, nil); rule != nil {
 		rule.apply(c.w.Header(), origin)
 	}
 }

@@ -78,6 +78,7 @@ type Bucket struct {
 	ObjectLock        *ObjectLockConfig  `json:"ol,omitempty"`
 	Tags              []Tag              `json:"t,omitempty"`
 	Policy            json.RawMessage    `json:"p,omitempty"`
+	PolicyText        string             `json:"pt,omitempty"` // policy exactly as submitted (GetBucketPolicy returns it verbatim)
 	ACL               *ACL               `json:"acl,omitempty"`
 	Encryption        *EncryptionRule    `json:"enc,omitempty"`
 	PublicAccessBlock *PublicAccessBlock `json:"pab,omitempty"`

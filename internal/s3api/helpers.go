@@ -111,7 +111,10 @@ func setObjectHeaders(h http.Header, o *meta.Object, b *meta.Bucket) {
 	setIf(h, "Expires", o.Expires)
 	setIf(h, "x-amz-website-redirect-location", o.WebsiteRedirect)
 	for k, v := range o.UserMeta {
-		h.Set("x-amz-meta-"+k, v)
+		// AWS returns user metadata header names in lower case; bypass
+		// Go's canonicalisation ("X-Amz-Meta-Foo") which SDKs surface
+		// as a differently-cased metadata key.
+		h["x-amz-meta-"+k] = []string{v}
 	}
 	if b != nil && b.Versioning != "" {
 		h.Set("x-amz-version-id", o.VersionID)
@@ -171,15 +174,15 @@ func (s *Server) parseObjectAttrs(c *reqCtx, forCopy bool) (object.ObjectAttrs, 
 		CacheControl: r.Header.Get("Cache-Control"), Expires: r.Header.Get("Expires"),
 		WebsiteRedirect: r.Header.Get("x-amz-website-redirect-location"), StorageClass: r.Header.Get("x-amz-storage-class"),
 	}
-	if a.ContentEncoding != "" {
-		// Strip aws-chunked from the stored encoding.
+	if strings.Contains(a.ContentEncoding, "aws-chunked") {
+		// Strip aws-chunked from the stored encoding (AWS keeps the rest).
 		var parts []string
 		for _, p := range strings.Split(a.ContentEncoding, ",") {
 			if p = strings.TrimSpace(p); p != "" && p != "aws-chunked" {
 				parts = append(parts, p)
 			}
 		}
-		a.ContentEncoding = strings.Join(parts, ",")
+		a.ContentEncoding = strings.Join(parts, ", ")
 	}
 	for k, v := range r.Header {
 		lk := strings.ToLower(k)
@@ -226,6 +229,9 @@ func parseSSEHeaders(r *http.Request, copySource bool) (object.SSERequest, error
 		if alg != "AES256" {
 			return req, s3err.New(s3err.InvalidEncryptionAlgorithmError)
 		}
+		if !copySource && r.Header.Get("x-amz-server-side-encryption") != "" {
+			return req, s3err.New(s3err.InvalidArgument).WithMessage("Server-side encryption with customer-provided keys cannot be combined with x-amz-server-side-encryption")
+		}
 		key, err := base64.StdEncoding.DecodeString(r.Header.Get(prefix + "-customer-key"))
 		if err != nil || len(key) != 32 {
 			return req, s3err.New(s3err.InvalidArgument).WithMessage("The secret key was invalid for the specified algorithm.")
@@ -238,14 +244,23 @@ func parseSSEHeaders(r *http.Request, copySource bool) (object.SSERequest, error
 		}
 		return req, nil
 	}
+	if r.Header.Get(prefix+"-customer-key") != "" || r.Header.Get(prefix+"-customer-key-MD5") != "" {
+		return req, s3err.New(s3err.InvalidArgument).WithMessage("Requests specifying Server Side Encryption with Customer provided keys must provide a valid encryption algorithm.")
+	}
 	if copySource {
 		return req, nil
 	}
 	switch v := r.Header.Get("x-amz-server-side-encryption"); v {
 	case "":
+		if r.Header.Get("x-amz-server-side-encryption-aws-kms-key-id") != "" {
+			return req, s3err.New(s3err.InvalidArgument).WithMessage("x-amz-server-side-encryption-aws-kms-key-id requires x-amz-server-side-encryption: aws:kms")
+		}
 	case "AES256", "aws:kms", "aws:kms:dsse":
 		req.Type = v
 		req.KMSKeyID = r.Header.Get("x-amz-server-side-encryption-aws-kms-key-id")
+		if v == "AES256" && req.KMSKeyID != "" {
+			return req, s3err.New(s3err.InvalidArgument).WithMessage("x-amz-server-side-encryption-aws-kms-key-id is only valid with x-amz-server-side-encryption: aws:kms")
+		}
 		if ctx := r.Header.Get("x-amz-server-side-encryption-context"); ctx != "" {
 			raw, err := base64.StdEncoding.DecodeString(ctx)
 			if err != nil {
@@ -257,7 +272,7 @@ func parseSSEHeaders(r *http.Request, copySource bool) (object.SSERequest, error
 			}
 		}
 	default:
-		return req, s3err.New(s3err.InvalidEncryptionAlgorithmError)
+		return req, s3err.New(s3err.InvalidArgument).WithMessage("The encryption method specified is not supported").WithExtra("ArgumentName", "x-amz-server-side-encryption").WithExtra("ArgumentValue", v)
 	}
 	return req, nil
 }
@@ -390,6 +405,9 @@ func parseCopySource(v string) (bucket, key, versionID string, err error) {
 func contentMD5Hex(r *http.Request) (string, error) {
 	v := r.Header.Get("Content-MD5")
 	if v == "" {
+		if _, present := r.Header["Content-Md5"]; present {
+			return "", s3err.New(s3err.InvalidDigest)
+		}
 		return "", nil
 	}
 	b, err := base64.StdEncoding.DecodeString(v)
@@ -400,11 +418,27 @@ func contentMD5Hex(r *http.Request) (string, error) {
 }
 
 // encodeKey applies encoding-type=url to a key for listing responses.
+// S3 percent-encodes every byte except unreserved characters and '/'
+// (so "foo+1/bar baz" becomes "foo%2B1/bar%20baz"), which is what SDKs
+// decode; url.QueryEscape would encode '/' and turn spaces into '+'.
 func encodeKey(k string, encode bool) string {
 	if !encode {
 		return k
 	}
-	return url.QueryEscape(k)
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(k); i++ {
+		c := k[i]
+		switch {
+		case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9', c == '-', c == '_', c == '.', c == '~', c == '/':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(hexDigits[c>>4])
+			b.WriteByte(hexDigits[c&15])
+		}
+	}
+	return b.String()
 }
 
 func atoiDefault(s string, def int) int {

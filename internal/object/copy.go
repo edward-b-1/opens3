@@ -3,6 +3,7 @@ package object
 import (
 	"context"
 	"io"
+	"strconv"
 
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/s3err"
@@ -87,6 +88,9 @@ func (s *Service) UploadPartCopy(ctx context.Context, in UploadPartCopyInput) (*
 	}
 	defer src.Body.Close()
 	size := src.Object.Size
+	if r := in.SrcRange; r != nil && r.Start >= 0 && (r.Start >= src.Object.Size || r.End >= src.Object.Size) {
+		return nil, nil, s3err.New(s3err.InvalidRange).WithMessage("The requested range is not satisfiable").WithExtra("ActualObjectSize", strconv.FormatInt(src.Object.Size, 10))
+	}
 	if src.Range != nil {
 		size = src.Range.End - src.Range.Start + 1
 	}

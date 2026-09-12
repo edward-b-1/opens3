@@ -46,8 +46,11 @@ func (s *Server) putObject(c *reqCtx) error {
 		return err
 	}
 	size := c.body.size
-	if size < 0 && c.body.chunked == nil && r.ContentLength < 0 && r.Header.Get("Transfer-Encoding") == "" {
+	if size < 0 && c.body.chunked == nil && r.ContentLength < 0 && len(r.TransferEncoding) == 0 {
 		return s3err.New(s3err.MissingContentLength)
+	}
+	if err := requireContentLength(r); err != nil {
+		return err
 	}
 	in := object.PutInput{Bucket: c.bucket, Key: c.key, Body: c.body, Size: size, ExpectedMD5: md5hex, ExpectedSHA256: c.body.expectedSHA256,
 		Checksum: cr, SSE: sseReq, Attrs: attrs, Conditions: readConditions(r, "")}
@@ -64,6 +67,16 @@ func (s *Server) putObject(c *reqCtx) error {
 	setSSEResponseHeaders(h, o)
 	setChecksumHeaders(h, o.Checksum)
 	c.w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// requireContentLength rejects object writes that carry neither a
+// Content-Length nor a Transfer-Encoding (Go reads such bodies as empty;
+// S3 answers 411 MissingContentLength).
+func requireContentLength(r *http.Request) error {
+	if _, ok := r.Header["Content-Length"]; !ok && len(r.TransferEncoding) == 0 && r.ContentLength <= 0 {
+		return s3err.New(s3err.MissingContentLength)
+	}
 	return nil
 }
 
@@ -106,6 +119,9 @@ func (s *Server) serveObject(c *reqCtx, head bool) error {
 			return errInvalidArg("Cannot specify both Range header and partNumber query parameter")
 		}
 	}
+	if r.Header.Get("x-amz-server-side-encryption") != "" || r.Header.Get("x-amz-server-side-encryption-aws-kms-key-id") != "" {
+		return errInvalidArg("Server-side encryption headers are only valid on object writes")
+	}
 	sseReq, err := parseSSEHeaders(r, false)
 	if err != nil {
 		return err
@@ -119,6 +135,9 @@ func (s *Server) serveObject(c *reqCtx, head bool) error {
 	res, err := s.obj.GetObject(r.Context(), in)
 	if err != nil {
 		var e *s3err.Error
+		if errors.As(err, &e) && e.Code == s3err.NoSuchKey && e.Headers["x-amz-delete-marker"] == "" {
+			c.w.Header().Set("x-amz-delete-marker", "false")
+		}
 		if errors.As(err, &e) && e.Code == s3err.NotModified {
 			// Include ETag/Last-Modified on 304 like AWS.
 			if o, serr := s.obj.StatObject(r.Context(), c.bucket, c.key, in.VersionID); serr == nil {
@@ -135,7 +154,10 @@ func (s *Server) serveObject(c *reqCtx, head bool) error {
 	if q.Get("x-amz-checksum-mode") != "" || strings.EqualFold(r.Header.Get("x-amz-checksum-mode"), "ENABLED") {
 		if partNumber > 0 && o.Checksum != nil && partNumber <= len(o.Parts) && o.Parts[partNumber-1].Checksum != "" {
 			h.Set(checksum.HeaderName(o.Checksum.Algorithm), o.Parts[partNumber-1].Checksum)
-		} else {
+			h.Set("x-amz-checksum-type", o.Checksum.Type)
+		} else if res.Range == nil {
+			// A whole-object checksum is not returned for a byte range: SDKs
+			// would validate it against the partial body.
 			setChecksumHeaders(h, o.Checksum)
 		}
 	}
@@ -191,9 +213,7 @@ func (s *Server) deleteObject(c *reqCtx) error {
 		return err
 	}
 	h := c.w.Header()
-	if res.DeleteMarker {
-		h.Set("x-amz-delete-marker", "true")
-	}
+	h.Set("x-amz-delete-marker", strconv.FormatBool(res.DeleteMarker))
 	if res.VersionID != "" {
 		h.Set("x-amz-version-id", res.VersionID)
 	}
@@ -438,8 +458,7 @@ func (s *Server) getObjectACL(c *reqCtx) error {
 
 func (s *Server) putObjectACL(c *reqCtx) error {
 	if c.bkt.Ownership == "BucketOwnerEnforced" {
-		canned := c.r.Header.Get("x-amz-acl")
-		if canned == "private" || canned == "bucket-owner-full-control" {
+		if c.r.Header.Get("x-amz-acl") == "bucket-owner-full-control" {
 			c.w.WriteHeader(http.StatusOK)
 			return nil
 		}

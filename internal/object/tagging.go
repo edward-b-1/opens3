@@ -49,7 +49,7 @@ func (s *Service) updateVersion(ctx context.Context, bucket, key, versionID stri
 // PutObjectTagging replaces the tag set of a version.
 func (s *Service) PutObjectTagging(ctx context.Context, actor Actor, bucket, key, versionID string, tags []meta.Tag) (*meta.Object, error) {
 	if len(tags) > MaxTags {
-		return nil, s3err.New(s3err.BadRequest).WithMessage("Object tags cannot be greater than 10")
+		return nil, s3err.New(s3err.InvalidTag).WithMessage("Object tags cannot be greater than 10")
 	}
 	if err := ValidateTags(tags); err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (s *Service) PutObjectRetention(ctx context.Context, actor Actor, bucket, k
 	o, err := s.updateVersion(ctx, bucket, key, versionID, func(o *meta.Object) error {
 		cur := o.Retention
 		if cur != nil && time.Now().Before(cur.RetainUntil) {
-			shortening := r == nil || r.RetainUntil.Before(cur.RetainUntil) || (cur.Mode == "COMPLIANCE" && r.Mode != "COMPLIANCE")
+			shortening := r == nil || r.RetainUntil.Before(cur.RetainUntil) || r.Mode != cur.Mode
 			if shortening {
 				if cur.Mode == "COMPLIANCE" || !bypassGovernance {
 					return s3err.New(s3err.AccessDenied)

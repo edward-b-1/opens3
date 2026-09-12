@@ -28,3 +28,9 @@ run: build
 
 clean:
 	rm -rf bin dist
+
+# Ceph s3-tests conformance suite (needs Docker). Extra pytest args via
+# S3TESTS_ARGS, e.g. make conformance S3TESTS_ARGS='-k test_bucket_list'.
+.PHONY: conformance
+conformance:
+	tests/s3tests/run.sh $(S3TESTS_ARGS)

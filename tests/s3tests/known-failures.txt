@@ -1,0 +1,71 @@
+# Ceph s3-tests known failures (tests/s3tests/run.sh). One pytest node id per line; '#' starts a comment.
+# This list may only shrink: report.py fails the run on any failure that is not listed here and
+# prints listed tests that now pass so they can be removed. Keep the reason next to each block.
+
+# Test mechanics: the header the test tries to remove/override is (re)set by botocore when it signs the
+# request, so the server receives a valid request (all marked fails_on_rgw upstream)
+s3tests/functional/test_headers.py::test_object_create_bad_contentlength_none
+s3tests/functional/test_headers.py::test_object_create_bad_authorization_empty
+s3tests/functional/test_headers.py::test_object_create_bad_authorization_none
+s3tests/functional/test_headers.py::test_bucket_create_bad_authorization_empty
+s3tests/functional/test_headers.py::test_bucket_create_bad_authorization_none
+s3tests/functional/test_headers.py::test_object_create_bad_authorization_incorrect_aws2
+s3tests/functional/test_headers.py::test_object_create_bad_authorization_invalid_aws2
+s3tests/functional/test_headers.py::test_object_create_bad_date_none_aws2
+s3tests/functional/test_headers.py::test_bucket_create_bad_authorization_invalid_aws2
+s3tests/functional/test_headers.py::test_bucket_create_bad_date_none_aws2
+s3tests/functional/test_headers.py::test_object_create_date_and_amz_date
+s3tests/functional/test_headers.py::test_object_create_amz_date_and_no_date
+s3tests/functional/test_headers.py::test_object_create_bad_contentlength_mismatch_below_aws2
+
+# Go net/http answers 417 itself for any Expect value other than 100-continue (AWS ignores the header)
+s3tests/functional/test_headers.py::test_object_create_bad_expect_mismatch
+s3tests/functional/test_headers.py::test_bucket_create_bad_expect_mismatch
+
+# AWS-documented behaviour that the suite (written against Ceph RGW) does not expect:
+# - re-creating an owned bucket in us-east-1 returns 200 OK (CreateBucket API reference)
+s3tests/functional/test_s3.py::test_bucket_recreate_overwrite_acl
+s3tests/functional/test_s3.py::test_bucket_recreate_new_acl
+
+# - X-Amz-Expires out of range is 400 AuthorizationQueryParametersError on AWS; the suite expects 403
+s3tests/functional/test_s3.py::test_object_raw_get_x_amz_expires_out_range_zero
+s3tests/functional/test_s3.py::test_object_raw_get_x_amz_expires_out_max_range
+s3tests/functional/test_s3.py::test_object_raw_get_x_amz_expires_out_positive_range
+s3tests/functional/test_s3.py::test_object_raw_put_authenticated_expired
+
+# - aws:kms without a key id uses the account's default key on AWS; the suite expects 400
+s3tests/functional/test_s3.py::test_sse_kms_no_key
+
+# - versioning-suspended buckets return x-amz-version-id: null on AWS; the suite expects no header
+s3tests/functional/test_s3.py::test_versioning_bucket_atomic_upload_return_version_id
+s3tests/functional/test_s3.py::test_versioning_bucket_multipart_upload_return_version_id
+
+# - GetObjectTorrent is not supported (501 NotImplemented); the suite accepts only 404
+s3tests/functional/test_s3.py::test_get_object_torrent
+
+# Suite models main/alt as separate accounts; OpenS3's main user is the root account, which bypasses
+# object ACLs on its own buckets (AWS: the account owner). request_obj_tag registers the tag header on
+# the main client instead of the alt client, so the alt request is correctly denied
+s3tests/functional/test_s3.py::test_bucket_policy_put_obj_grant
+s3tests/functional/test_s3.py::test_bucket_policy_put_obj_request_obj_tag
+
+# Ceph-specific: tenant-qualified bucket names, duplicate part numbers in CompleteMultipartUpload,
+# rejecting keys containing C1 control characters
+s3tests/functional/test_s3.py::test_bucket_policy_different_tenant
+s3tests/functional/test_s3.py::test_bucket_policy_tenanted_bucket
+s3tests/functional/test_s3.py::test_multipart_resend_first_finishes_last
+s3tests/functional/test_s3.py::test_object_read_unreadable
+
+# Not implemented yet: idempotent repeat of CompleteMultipartUpload after the upload finished
+s3tests/functional/test_s3.py::test_multipart_upload_small
+s3tests/functional/test_s3.py::test_multipart_upload
+s3tests/functional/test_s3.py::test_multipart_reupload_checksum_and_etag
+
+# Not implemented yet: ...IfExists condition operators in bucket policies
+s3tests/functional/test_s3.py::test_bucket_policy_set_condition_operator_end_with_IfExists
+
+# Not implemented yet: server-generated IDs for lifecycle rules without an ID
+s3tests/functional/test_s3.py::test_lifecycle_get_no_id
+
+# Not implemented yet: user metadata values that are not valid UTF-8 are not preserved byte-for-byte
+s3tests/functional/test_s3.py::test_object_set_get_unicode_metadata
