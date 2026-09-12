@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>OpenS3 Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M9 11.5A7 4 0 0 1 23 11.5v9A7 4 0 0 1 9 20.5z' fill='none' stroke='white' stroke-width='2.2'/%3E%3Cellipse cx='16' cy='11.5' rx='7' ry='4' fill='none' stroke='white' stroke-width='2.2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <button class="btn btn-ghost icon-btn nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+    <a class="brand" href="#/buckets"><span class="brand-mark" aria-hidden="true"></span>OpenS3</a>
+    <div class="topbar-spacer"></div>
+    <span class="topbar-user" id="topbar-user"></span>
+    <button class="btn btn-ghost" id="logout-btn">Log out</button>
+  </header>
+  <nav class="sidebar" id="nav" aria-label="Sections">
+    <a href="#/buckets" data-nav="buckets">Buckets</a>
+    <a href="#/identity/users" data-nav="identity" data-admin>Identity</a>
+    <a href="#/identity/keys" data-nav="identity" data-user>My access keys</a>
+    <a href="#/kms" data-nav="kms" data-admin>Encryption keys</a>
+    <a href="#/status" data-nav="status">Status</a>
+    <div class="sidebar-foot" id="sidebar-foot"></div>
+  </nav>
+  <main class="main" id="main" tabindex="-1"></main>
+</div>
+<div id="login-root" hidden></div>
+<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+<div id="modal-root"></div>
+<script src="api.js"></script>
+<script src="ui.js"></script>
+<script src="views/login.js"></script>
+<script src="views/buckets.js"></script>
+<script src="views/objects.js"></script>
+<script src="views/identity.js"></script>
+<script src="views/kms.js"></script>
+<script src="views/status.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
