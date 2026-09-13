@@ -22,7 +22,7 @@ const policyNames = async () => (await api.get('policies')).policies.map((p) => 
 const userNames = async () => (await api.get('users')).users.map((u) => u.name);
 
 identityTabs.users = async function (body) {
-  const { h, clear, table, badge, fmtDate, modal, confirm, field, multiSelect, toast, error } = ui;
+  const { h, clear, table, badge, fmtDate, modal, confirm, field, multiSelect, toast, error, copy } = ui;
   const filter = h('input.input.grow', { placeholder: 'Filter users', 'data-filter': '1', onInput: render });
   const wrap = h('div');
   let users = [];
@@ -159,7 +159,7 @@ identityTabs.keys = async function (body) {
 };
 
 identityTabs.groups = async function (body) {
-  const { h, clear, table, badge, fmtDate, modal, confirm, field, multiSelect, toast, error } = ui;
+  const { h, clear, table, badge, fmtDate, modal, confirm, field, multiSelect, toast, error, copy } = ui;
   const wrap = h('div');
   let groups = [];
   body.append(h('div.toolbar', h('div.grow'), h('button.btn.btn-primary', { onClick: () => edit(null) }, 'Create group')), wrap);

@@ -172,7 +172,26 @@
 
   const field = (label, input, hint) => h('label.field', h('span', label), input, hint ? h('div.hint', hint) : null);
   const badge = (text, kind) => h('span.badge' + (kind ? '.' + kind : ''), text);
-  const copy = (text) => navigator.clipboard ? navigator.clipboard.writeText(text).then(() => toast('Copied', 'success', 1500)) : toast('Clipboard unavailable', 'error');
+  // copy(text): the async clipboard API exists only in secure contexts
+  // (https or localhost), so fall back to a selection-based copy elsewhere.
+  function copyFallback(text) {
+    const ta = h('textarea', { value: text, readOnly: true, style: 'position:fixed;top:0;left:0;opacity:0;pointer-events:none' });
+    document.body.append(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  function copy(text) {
+    const done = () => toast('Copied', 'success', 1500);
+    const fail = () => toast('Could not copy automatically; select the text and copy it by hand.', 'error');
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => (copyFallback(text) ? done() : fail()));
+    } else {
+      copyFallback(text) ? done() : fail();
+    }
+  }
 
   window.ui = { h, clear, toast, error, modal, confirm, fmtBytes, fmtDate, dateCell, fmtDuration, pretty, table, jsonField, tagsField, multiSelect, field, badge, copy };
 })();
