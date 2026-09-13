@@ -5,26 +5,7 @@ Move an item to "Done" with the commit that closed it.
 
 ## Open
 
-1. **Identity model: move to the AWS model (decided 13 Sep 2026).**
-   - API credentials are generated key pairs: a 20-character key ID and a
-     40-character secret, shown once, no prefix. The web UI must never let
-     a user type either value (requested 13 Sep 2026); the admin API and
-     CLI keep accepting a chosen key ID of three or more characters solely
-     for migrating MinIO-style credentials, and any existing key keeps
-     working. Users may hold several keys.
-   - Console sign-in accepts a user name and console password only; key
-     pairs are refused there with a message pointing at the API. The root
-     account signs in with the root user name and root password from the
-     environment.
-   - A console password is optional per user: set in the create-user
-     dialog or by an administrator later; users can change their own.
-     Stored as PBKDF2-SHA256 with a per-user salt (standard library); never
-     usable against the S3 API.
-   - The create-user dialog and `opens3 admin user add` follow this: name,
-     policies, optional console password, generated key pair (or a chosen
-     one for MinIO-style migration).
-   - Later, not now: MFA and password rules for console passwords.
-2. **Administrative API: adopt the AWS interface and vocabulary (decided
+1. **Administrative API: adopt the AWS interface and vocabulary (decided
    13 Sep 2026).** Implement the AWS IAM Query API (the protocol behind
    `aws iam ...` and boto3's `iam` client: SigV4-signed POST with
    `Action=CreateUser&Version=2010-05-08`, XML responses) as the canonical
@@ -69,6 +50,11 @@ Move an item to "Done" with the commit that closed it.
   programmatic key cannot be used in a browser.
 
 ## Done
+
+- Identity model moved to the AWS model: generated 20/40-character key
+  pairs (never chosen in the console), optional PBKDF2 console passwords,
+  console sign-in by user name and password only, root via the configured
+  root credentials, `opens3 admin user add/password`.
 
 - Purge expired temporary credentials: hourly sweep and on startup
   (`OPENS3_PURGE_INTERVAL`), metric `opens3_iam_expired_credentials_purged_total`.

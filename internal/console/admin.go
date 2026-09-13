@@ -60,10 +60,11 @@ type userOut struct {
 	Groups   []string  `json:"groups"`
 	Created  time.Time `json:"created"`
 	Keys     int       `json:"keys"`
+	Console  bool      `json:"console"` // has a console password
 }
 
 func userView(u *iam.User, keys int) userOut {
-	return userOut{Name: u.Name, Enabled: u.Enabled, Policies: strs(u.Policies), Groups: strs(u.Groups), Created: u.Created, Keys: keys}
+	return userOut{Name: u.Name, Enabled: u.Enabled, Policies: strs(u.Policies), Groups: strs(u.Groups), Created: u.Created, Keys: keys, Console: u.HasPassword()}
 }
 
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request, s *session) error {
@@ -95,25 +96,99 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request, s *session)
 		return err
 	}
 	var in struct {
-		Name     string   `json:"name"`
-		Secret   string   `json:"secretKey"`
-		Policies []string `json:"policies"`
+		Name      string   `json:"name"`
+		Policies  []string `json:"policies"`
+		Password  string   `json:"password"`
+		NoKey     bool     `json:"noKey"`
+		SecretKey string   `json:"secretKey"`
+		AccessKey string   `json:"accessKey"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return err
 	}
-	if err := h.d.IAM.CreateUser(strings.TrimSpace(in.Name), in.Secret, in.Policies); err != nil {
+	if in.SecretKey != "" || in.AccessKey != "" {
+		return badRequest("access keys and secrets are generated; they cannot be chosen here")
+	}
+	name := strings.TrimSpace(in.Name)
+	if err := h.d.IAM.CreateUser(name, "", in.Policies); err != nil {
 		return err
 	}
-	u, err := h.d.IAM.GetUser(strings.TrimSpace(in.Name))
+	if in.Password != "" {
+		if err := h.d.IAM.SetPassword(name, in.Password); err != nil {
+			_ = h.d.IAM.DeleteUser(name)
+			return err
+		}
+	}
+	out := map[string]any{}
+	keys := 0
+	if !in.NoKey {
+		k, secret, err := h.d.IAM.CreateKey(name, "", "", iam.KindUser, nil, nil, "")
+		if err != nil {
+			_ = h.d.IAM.DeleteUser(name)
+			return err
+		}
+		keys = 1
+		out["key"] = keyView(k)
+		out["secretKey"] = secret
+	}
+	u, err := h.d.IAM.GetUser(name)
 	if err != nil {
 		return err
 	}
-	keys := 0
-	if in.Secret != "" {
-		keys = 1
+	out["user"] = userView(u, keys)
+	writeJSON(w, http.StatusCreated, out)
+	return nil
+}
+
+func (h *Handler) setUserPassword(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.admin(s, "admin:UpdateUser"); err != nil {
+		return err
 	}
-	writeJSON(w, http.StatusCreated, userView(u, keys))
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		return err
+	}
+	if err := h.d.IAM.SetPassword(r.PathValue("name"), in.Password); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+func (h *Handler) clearUserPassword(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.admin(s, "admin:UpdateUser"); err != nil {
+		return err
+	}
+	if err := h.d.IAM.ClearPassword(r.PathValue("name")); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+// changeMyPassword lets a signed-in user change their own console password
+// after proving the current one.
+func (h *Handler) changeMyPassword(w http.ResponseWriter, r *http.Request, s *session) error {
+	var in struct {
+		Current string `json:"current"`
+		New     string `json:"new"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		return err
+	}
+	name := s.id.Name()
+	if s.id.IsRoot {
+		return badRequest("the root password comes from the server configuration")
+	}
+	if _, err := h.d.IAM.VerifyPassword(name, in.Current); err != nil {
+		return apiErr(http.StatusForbidden, "InvalidCredentials", "current password is incorrect")
+	}
+	if err := h.d.IAM.SetPassword(name, in.New); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
 }
 
@@ -150,7 +225,6 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, s *session)
 	var in struct {
 		Enabled  *bool    `json:"enabled"`
 		Policies []string `json:"policies"`
-		Secret   string   `json:"secretKey"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		return err
@@ -169,17 +243,6 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, s *session)
 	})
 	if err != nil {
 		return err
-	}
-	if in.Secret != "" {
-		// Rotate (or create) the key named after the user.
-		if _, err := h.d.IAM.GetKey(name); err == nil {
-			err = h.d.IAM.SetSecret(name, in.Secret)
-		} else {
-			_, _, err = h.d.IAM.CreateKey(name, name, in.Secret, iam.KindUser, nil, nil, "")
-		}
-		if err != nil {
-			return err
-		}
 	}
 	u, err := h.d.IAM.GetUser(name)
 	if err != nil {
@@ -266,6 +329,9 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request, s *session) 
 	if in.User == "" {
 		in.User = s.id.Name()
 	}
+	if in.AccessKey != "" || in.SecretKey != "" {
+		return badRequest("access keys and secrets are generated; they cannot be chosen here")
+	}
 	if err := h.keyAccess(s, in.User, "admin:CreateKey"); err != nil {
 		return err
 	}
@@ -307,7 +373,7 @@ func (h *Handler) updateKey(w http.ResponseWriter, r *http.Request, s *session) 
 	}
 	var in struct {
 		Enabled       *bool           `json:"enabled"`
-		SecretKey     string          `json:"secretKey"`
+		Rotate        bool            `json:"rotate"`
 		Description   *string         `json:"description"`
 		SessionPolicy json.RawMessage `json:"sessionPolicy"`
 	}
@@ -338,14 +404,20 @@ func (h *Handler) updateKey(w http.ResponseWriter, r *http.Request, s *session) 
 	if err != nil {
 		return err
 	}
-	if in.SecretKey != "" {
-		if err := h.d.IAM.SetSecret(ak, in.SecretKey); err != nil {
+	var newSecret string
+	if in.Rotate {
+		newSecret = iam.GenerateSecretKey()
+		if err := h.d.IAM.SetSecret(ak, newSecret); err != nil {
 			return err
 		}
 	}
 	k, err = h.d.IAM.GetKey(ak)
 	if err != nil {
 		return err
+	}
+	if newSecret != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"key": keyView(k), "secretKey": newSecret})
+		return nil
 	}
 	writeJSON(w, http.StatusOK, keyView(k))
 	return nil

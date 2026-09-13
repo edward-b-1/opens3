@@ -14,7 +14,6 @@ package console
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -141,6 +140,9 @@ func (h *Handler) routes() {
 	api("POST /console/api/users", h.createUser)
 	api("GET /console/api/users/{name}", h.getUser)
 	api("PATCH /console/api/users/{name}", h.updateUser)
+	api("PUT /console/api/users/{name}/password", h.setUserPassword)
+	api("DELETE /console/api/users/{name}/password", h.clearUserPassword)
+	api("PUT /console/api/me/password", h.changeMyPassword)
 	api("DELETE /console/api/users/{name}", h.deleteUser)
 	api("GET /console/api/keys", h.listKeys)
 	api("POST /console/api/keys", h.createKey)
@@ -283,6 +285,10 @@ func (h *Handler) etag(name string, rs io.ReadSeeker) string {
 // --- sessions --------------------------------------------------------------
 
 type loginRequest struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	// Legacy field names: a client sending an access key pair gets a
+	// pointed error rather than a silent failure.
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
 }
@@ -293,24 +299,18 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	bad := apiErr(http.StatusUnauthorized, "InvalidCredentials", "invalid access key or secret key")
-	if in.AccessKey == "" || in.SecretKey == "" {
+	if in.User == "" && in.AccessKey != "" {
+		h.fail(w, r, apiErr(http.StatusBadRequest, "AccessKeyNotAccepted", "the console signs in with a user name and console password; access keys work only with the S3 API"))
+		return
+	}
+	bad := apiErr(http.StatusUnauthorized, "InvalidCredentials", "invalid user name or password")
+	if in.User == "" || in.Password == "" {
 		h.fail(w, r, bad)
 		return
 	}
-	secret, err := h.d.IAM.LookupSecret(in.AccessKey)
+	id, err := h.d.IAM.VerifyPassword(in.User, in.Password)
 	if err != nil {
-		// Burn comparable time so a missing key is not distinguishable.
-		subtle.ConstantTimeCompare([]byte(in.SecretKey), []byte(in.SecretKey))
-		h.fail(w, r, bad)
-		return
-	}
-	if subtle.ConstantTimeCompare([]byte(secret), []byte(in.SecretKey)) != 1 {
-		h.fail(w, r, bad)
-		return
-	}
-	id, err := h.d.IAM.Resolve(in.AccessKey, "")
-	if err != nil {
+		h.d.Log.Info("console login failed", "user", in.User)
 		h.fail(w, r, bad)
 		return
 	}

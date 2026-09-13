@@ -129,3 +129,17 @@ and per device, never sent to the server, and survive logging out:
 
 "Reset to defaults" restores the built-in values. Density and theme apply
 instantly through CSS; the other settings re-render the current page.
+
+## Signing in and credentials (AWS model)
+
+- The console signs in with a **user name and console password**. Access
+  key pairs are refused at the console; they authenticate S3 API requests
+  only. The root account signs in with `OPENS3_ROOT_USER` and
+  `OPENS3_ROOT_PASSWORD`.
+- A console password is optional per user. An administrator sets or
+  removes it when creating or editing the user; users change their own
+  with the "Change password" button. Passwords are stored as PBKDF2-SHA256
+  hashes with a per-user salt and are never usable against the API.
+- API credentials are always **generated**: a 20-character access key ID
+  and a 40-character secret, shown once. The console never lets anyone
+  choose either value. Rotating a key generates a new secret.

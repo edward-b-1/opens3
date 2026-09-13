@@ -161,3 +161,14 @@ opens3 admin bucket rm scratch --force
 
 Exit codes: `0` success, `1` the server returned an error (printed as
 `code (status): message`), `2` usage error.
+
+## Users, keys and console passwords
+
+`PUT users/{name}` creates or updates a user. On creation, `generate_key`
+returns a generated access key pair once in `credentials`; `password` sets
+the console password; `secret_key` creates a MinIO-style key whose ID is
+the user name (kept for migrating MinIO credentials only). `PUT
+users/{name}/password` and `DELETE users/{name}/password` set and remove
+the console password. CLI: `opens3 admin user add NAME [--policy ...]
+[--password P] [--no-key]` and `opens3 admin user password NAME (--password
+P | --clear)`.

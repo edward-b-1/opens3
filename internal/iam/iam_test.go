@@ -3,6 +3,7 @@ package iam
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,4 +212,63 @@ func TestAuthorize(t *testing.T) {
 	check("admin allowed", a, adm, true)
 	check("admin denied for rw", a, rw, false)
 	check("admin root", a, root, true)
+}
+
+func TestConsolePasswords(t *testing.T) {
+	s := openStore(t)
+	if err := s.CreateUser("carol", "", []string{"readonly"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.VerifyPassword("carol", "anything"); err != ErrBadPassword {
+		t.Fatalf("no password set: %v", err)
+	}
+	if err := s.SetPassword("carol", "short"); err == nil {
+		t.Fatal("short password accepted")
+	}
+	if err := s.SetPassword("carol", "correct horse battery"); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := s.GetUser("carol")
+	if !u.HasPassword() || string(u.PasswordHash) == "correct horse battery" {
+		t.Fatal("password must be stored hashed")
+	}
+	id, err := s.VerifyPassword("carol", "correct horse battery")
+	if err != nil || id.Name() != "carol" || len(id.Policies) != 1 {
+		t.Fatalf("verify: %v", err)
+	}
+	if _, err := s.VerifyPassword("carol", "wrong"); err != ErrBadPassword {
+		t.Fatal("wrong password accepted")
+	}
+	if _, err := s.VerifyPassword("nobody", "x"); err != ErrBadPassword {
+		t.Fatal("unknown user")
+	}
+	// A password is never an API credential.
+	if _, err := s.LookupSecret("carol"); err != ErrNotFound {
+		t.Fatalf("password must not be an access key: %v", err)
+	}
+	// Root signs in with the configured root credentials.
+	if id, err := s.VerifyPassword("rootuser", "rootsecret"); err != nil || !id.IsRoot {
+		t.Fatalf("root: %v", err)
+	}
+	if _, err := s.VerifyPassword("rootuser", "nope"); err != ErrBadPassword {
+		t.Fatal("root wrong password")
+	}
+	s.UpdateUser("carol", func(u *User) error { u.Enabled = false; return nil })
+	if _, err := s.VerifyPassword("carol", "correct horse battery"); err != ErrDisabled {
+		t.Fatal("disabled user")
+	}
+	s.UpdateUser("carol", func(u *User) error { u.Enabled = true; return nil })
+	if err := s.ClearPassword("carol"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.VerifyPassword("carol", "correct horse battery"); err != ErrBadPassword {
+		t.Fatal("cleared password still works")
+	}
+	// Generated credentials have the documented shape.
+	if ak := GenerateAccessKey(); len(ak) != 20 || strings.ToUpper(ak) != ak {
+		t.Fatalf("access key %q", ak)
+	}
+	if sk := GenerateSecretKey(); len(sk) != 40 {
+		t.Fatalf("secret key %q", sk)
+	}
 }

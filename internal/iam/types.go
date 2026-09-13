@@ -25,8 +25,15 @@ type User struct {
 	Policies []string  `json:"p,omitempty"` // attached named policies
 	Groups   []string  `json:"g,omitempty"`
 	Created  time.Time `json:"c"`
-	// Parent is set for service-account owners (the user this account acts as).
+	// Console password (optional): PBKDF2-SHA256 hash with a per-user salt.
+	// Never usable against the S3 API.
+	PasswordHash []byte    `json:"ph,omitempty"`
+	PasswordSalt []byte    `json:"ps,omitempty"`
+	PasswordSet  time.Time `json:"pt,omitempty"`
 }
+
+// HasPassword reports whether a console password is set.
+func (u *User) HasPassword() bool { return u != nil && len(u.PasswordHash) > 0 }
 
 // Key is an access key record.
 type Key struct {

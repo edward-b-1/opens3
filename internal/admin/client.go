@@ -123,6 +123,16 @@ func (c *Client) PutUser(ctx context.Context, name string, in PutUserRequest) (*
 	return &out, c.do(ctx, http.MethodPut, "/users/"+esc(name), nil, in, &out)
 }
 
+// SetUserPassword sets a user's console password.
+func (c *Client) SetUserPassword(ctx context.Context, name, password string) error {
+	return c.do(ctx, http.MethodPut, "/users/"+esc(name)+"/password", nil, PasswordRequest{Password: password}, nil)
+}
+
+// ClearUserPassword removes a user's console password.
+func (c *Client) ClearUserPassword(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/users/"+esc(name)+"/password", nil, nil, nil)
+}
+
 // DeleteUser removes a user and its keys.
 func (c *Client) DeleteUser(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/users/"+esc(name), nil, nil, nil)

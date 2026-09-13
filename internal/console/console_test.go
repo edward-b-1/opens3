@@ -89,7 +89,7 @@ func (e *env) do(c *http.Client, method, path string, body any, hdr map[string]s
 
 func (e *env) login(c *http.Client, ak, sk string) (*http.Response, map[string]any) {
 	e.t.Helper()
-	return e.do(c, "POST", "/console/api/login", map[string]string{"accessKey": ak, "secretKey": sk}, nil)
+	return e.do(c, "POST", "/console/api/login", map[string]string{"user": ak, "password": sk}, nil)
 }
 
 func (e *env) mustLogin(c *http.Client, ak, sk string) {
@@ -308,9 +308,28 @@ func TestBucketObjectRoundTrip(t *testing.T) {
 func TestNonAdminDenied(t *testing.T) {
 	e := newEnv(t)
 	e.mustLogin(e.c, rootUser, rootPass)
-	resp, out := e.do(e.c, "POST", "/console/api/users", map[string]any{"name": "alice", "secretKey": "alicesecret1", "policies": []string{"readwrite"}}, nil)
+	resp, out := e.do(e.c, "POST", "/console/api/users", map[string]any{"name": "alice", "password": "alicesecret1", "policies": []string{"readwrite"}}, nil)
 	if resp.StatusCode != 201 {
 		t.Fatalf("create user: %d %v", resp.StatusCode, out)
+	}
+	key, _ := out["key"].(map[string]any)
+	secret, _ := out["secretKey"].(string)
+	if key == nil || len(key["accessKey"].(string)) != 20 || len(secret) != 40 {
+		t.Fatalf("generated credentials missing: %v", out)
+	}
+	// Access keys are for the API only: the pair is refused at the console.
+	if resp, out := e.do(newClient(), "POST", "/console/api/login", map[string]string{"user": key["accessKey"].(string), "password": secret}, nil); resp.StatusCode != 401 {
+		t.Fatalf("key pair must not sign in: %d %v", resp.StatusCode, out)
+	}
+	if resp, out := e.do(newClient(), "POST", "/console/api/login", map[string]string{"accessKey": key["accessKey"].(string), "secretKey": secret}, nil); resp.StatusCode != 400 || errCode(out) != "AccessKeyNotAccepted" {
+		t.Fatalf("legacy login fields: %d %v", resp.StatusCode, out)
+	}
+	// Chosen credentials are refused.
+	if resp, _ := e.do(e.c, "POST", "/console/api/users", map[string]any{"name": "bob", "secretKey": "bobsecret123"}, nil); resp.StatusCode != 400 {
+		t.Fatalf("chosen secret must be refused: %d", resp.StatusCode)
+	}
+	if resp, _ := e.do(e.c, "POST", "/console/api/keys", map[string]any{"user": "alice", "accessKey": "CHOSEN", "secretKey": "chosensecret"}, nil); resp.StatusCode != 400 {
+		t.Fatalf("chosen key must be refused: %d", resp.StatusCode)
 	}
 	if resp, out = e.do(e.c, "POST", "/console/api/buckets", map[string]any{"name": "shared"}, nil); resp.StatusCode != 201 {
 		t.Fatalf("create bucket: %d %v", resp.StatusCode, out)
@@ -326,7 +345,7 @@ func TestNonAdminDenied(t *testing.T) {
 			t.Fatalf("alice %s: want 403 AccessDenied, got %d %v", p, resp.StatusCode, out)
 		}
 	}
-	if resp, out = e.do(alice, "POST", "/console/api/users", map[string]any{"name": "mallory", "secretKey": "mallorysecret"}, nil); resp.StatusCode != 403 {
+	if resp, out = e.do(alice, "POST", "/console/api/users", map[string]any{"name": "mallory", "password": "mallorysecret"}, nil); resp.StatusCode != 403 {
 		t.Fatalf("alice create user: want 403, got %d %v", resp.StatusCode, out)
 	}
 	// readwrite grants s3:* so alice can use buckets and manage her own keys.

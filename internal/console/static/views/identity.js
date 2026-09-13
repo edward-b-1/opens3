@@ -38,6 +38,7 @@ identityTabs.users = async function (body) {
       { h: 'Policies', cell: (u) => u.policies.join(', ') || h('span.muted', 'none') },
       { h: 'Groups', cell: (u) => u.groups.join(', ') || h('span.muted', 'none') },
       { h: 'Keys', cls: 'num', cell: (u) => u.keys },
+      { h: 'Console', cell: (u) => u.name === 'root' ? badge('root', 'ok') : u.console ? badge('password set', 'ok') : h('span.muted', 'API only') },
       { h: 'Created', cell: (u) => fmtDate(u.created) },
       { h: '', cls: 'actions-cell', cell: (u) => [
         h('a.btn.btn-sm', { href: '#/identity/keys?user=' + enc(u.name), onClick: (e) => { e.preventDefault(); sessionStorage.setItem('keysUser', u.name); app.go('/identity/keys'); } }, 'Keys'),
@@ -48,19 +49,38 @@ identityTabs.users = async function (body) {
   async function create() {
     const pols = await policyNames();
     const name = h('input.input', { required: true, spellcheck: false, placeholder: 'alice' });
-    const secret = h('input.input', { type: 'password', autocomplete: 'new-password', minLength: 8 });
+    const pw = h('input.input', { type: 'password', autocomplete: 'new-password', minLength: 8, placeholder: 'leave empty for API-only users' });
+    const noKey = h('input', { type: 'checkbox' });
     const sel = multiSelect('Policies', pols, []);
-    if (await modal({ title: 'Create user', submit: 'Create',
-      body: [field('User name', name, 'Also used as the access key of the initial key pair.'), field('Secret key', secret, 'At least 8 characters. Leave empty to create the user without a key.'), sel],
-      onSubmit: async () => { await api.post('users', { name: name.value.trim(), secretKey: secret.value, policies: sel.value() }); toast('User created', 'success'); } })) reload();
+    const r = await modal({ title: 'Create user', submit: 'Create',
+      body: [field('User name', name), sel,
+        field('Console password', pw, 'Optional. Lets this user sign in to the console. At least 8 characters.'),
+        h('label.check', noKey, 'Do not create an access key now'),
+        h('p.muted.small', 'An access key ID and secret are generated for the S3 API and shown once after creation.')],
+      onSubmit: () => api.post('users', { name: name.value.trim(), policies: sel.value(), password: pw.value || undefined, noKey: noKey.checked }) });
+    if (r) { toast('User created', 'success'); if (r.key) await showCredentials(r); reload(); }
+  }
+  function showCredentials(r) {
+    return modal({ title: 'Access key for ' + r.key.user, submit: null, cancel: 'Done', body: [
+      h('div.secret-box', h('p', h('strong', 'Copy the secret key now.'), ' It is shown only once and cannot be recovered.'),
+        h('dl.kv', h('dt', 'Access key'), h('dd', h('code', r.key.accessKey), ' ', h('button.btn.btn-sm', { type: 'button', onClick: () => copy(r.key.accessKey) }, 'Copy')),
+          h('dt', 'Secret key'), h('dd', h('code', r.secretKey), ' ', h('button.btn.btn-sm', { type: 'button', onClick: () => copy(r.secretKey) }, 'Copy'))))] });
   }
   async function edit(u) {
     const pols = await policyNames();
     const enabled = h('input', { type: 'checkbox', checked: u.enabled });
-    const secret = h('input.input', { type: 'password', autocomplete: 'new-password', minLength: 8 });
+    const pw = h('input.input', { type: 'password', autocomplete: 'new-password', minLength: 8, placeholder: u.console ? 'leave empty to keep' : 'none set' });
+    const clearPw = h('input', { type: 'checkbox', disabled: !u.console });
     const sel = multiSelect('Policies', pols, u.policies);
-    if (await modal({ title: 'Edit ' + u.name, body: [h('label.check', enabled, 'Enabled'), sel, field('New secret key', secret, 'Leave empty to keep the current secret. Sets the key named after the user (creating it if missing).')],
-      onSubmit: async () => { await api.patch('users/' + enc(u.name), { enabled: enabled.checked, policies: sel.value(), secretKey: secret.value || undefined }); toast('User updated', 'success'); } })) reload();
+    if (await modal({ title: 'Edit ' + u.name, body: [h('label.check', enabled, 'Enabled'), sel,
+        field('Console password', pw, u.console ? 'Set a new console password.' : 'Set a console password to let this user sign in here.'),
+        u.console ? h('label.check', clearPw, 'Remove the console password (API access keys are unaffected)') : null],
+      onSubmit: async () => {
+        await api.patch('users/' + enc(u.name), { enabled: enabled.checked, policies: sel.value() });
+        if (clearPw.checked) await api.del('users/' + enc(u.name) + '/password');
+        else if (pw.value) await api.put('users/' + enc(u.name) + '/password', { password: pw.value });
+        toast('User updated', 'success');
+      } })) reload();
   }
   async function remove(u) {
     if (!await confirm('Delete user', 'Delete user "' + u.name + '" and all of its access keys?')) return;
@@ -106,26 +126,25 @@ identityTabs.keys = async function (body) {
     const users = admin ? await userNames() : [app.me.user];
     const user = h('select', { disabled: !admin }, users.map((u) => h('option', { value: u, selected: u === (initial || app.me.user) }, u)));
     const kind = h('select', h('option', { value: 'service' }, 'Service account (optional session policy)'), h('option', { value: 'user' }, 'Regular user key'));
-    const ak = h('input.input', { spellcheck: false, placeholder: 'generated if empty' });
-    const sk = h('input.input', { type: 'password', autocomplete: 'new-password', placeholder: 'generated if empty', minLength: 8 });
     const desc = h('input.input');
     const expires = h('input.input', { type: 'datetime-local' });
     const pol = jsonField('Session policy (optional)', null);
     const r = await modal({ title: 'Create access key', submit: 'Create', wide: true,
-      body: [field('User', user), field('Kind', kind), h('div.grid', field('Access key', ak), field('Secret key', sk)), field('Description', desc), field('Expires', expires),
-        h('p.muted.small', 'A session policy restricts the key to a subset of the user\'s permissions; it can never grant more.'), pol],
-      onSubmit: () => api.post('keys', { user: user.value, kind: kind.value, accessKey: ak.value.trim(), secretKey: sk.value, description: desc.value, sessionPolicy: pol.value(),
+      body: [field('User', user), field('Kind', kind), field('Description', desc), field('Expires', expires),
+        h('p.muted.small', 'The access key ID and secret are generated and shown once. A session policy restricts the key to a subset of the user\'s permissions; it can never grant more.'), pol],
+      onSubmit: () => api.post('keys', { user: user.value, kind: kind.value, description: desc.value, sessionPolicy: pol.value(),
         expires: expires.value ? new Date(expires.value).toISOString() : undefined }) });
     if (r) { await showSecret(r); reload(); }
   }
   async function edit(k) {
     const desc = h('input.input', { value: k.description || '' });
-    const sk = h('input.input', { type: 'password', autocomplete: 'new-password', minLength: 8, placeholder: 'leave empty to keep' });
+    const rotate = h('input', { type: 'checkbox' });
     const pol = jsonField('Session policy', k.sessionPolicy);
-    if (await modal({ title: 'Edit ' + k.accessKey, wide: true, body: [field('Description', desc), field('Rotate secret key', sk), pol],
+    if (await modal({ title: 'Edit ' + k.accessKey, wide: true, body: [field('Description', desc), h('label.check', rotate, 'Rotate: generate a new secret key (shown once)'), pol],
       onSubmit: async () => {
         const doc = pol.value();
-        await api.patch('keys/' + enc(k.accessKey), { description: desc.value, secretKey: sk.value || undefined, sessionPolicy: doc === null ? (k.sessionPolicy ? null : undefined) : doc });
+        const r = await api.patch('keys/' + enc(k.accessKey), { description: desc.value, rotate: rotate.checked || undefined, sessionPolicy: doc === null ? (k.sessionPolicy ? null : undefined) : doc });
+        if (r && r.secretKey) await showSecret(r);
         toast('Key updated', 'success');
       } })) reload();
   }

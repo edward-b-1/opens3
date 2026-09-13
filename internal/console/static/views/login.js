@@ -13,10 +13,10 @@ views.login = function (root, onLogin) {
       catch (err) { error(err); sk.select(); }
       finally { btn.disabled = false; }
     },
-  }, field('Access key', ak), field('Secret key', sk), btn);
+  }, field('User name', ak), field('Password', sk), btn);
   root.append(h('div.login', h('div.card',
     h('div.brand', h('span.brand-mark', { 'aria-hidden': 'true' }), 'OpenS3 Console'),
     form,
-    h('p.muted.small', { style: 'margin-top:14px' }, 'Sign in with any OpenS3 access key. Root credentials come from OPENS3_ROOT_USER / OPENS3_ROOT_PASSWORD.'))));
+    h('p.muted.small', { style: 'margin-top:14px' }, 'Sign in with your user name and console password. Access keys are for the S3 API only. The root account uses OPENS3_ROOT_USER / OPENS3_ROOT_PASSWORD.'))));
   ak.focus();
 };

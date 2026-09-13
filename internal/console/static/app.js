@@ -46,6 +46,7 @@
     document.getElementById('login-root').hidden = true;
     document.getElementById('app').hidden = false;
     document.getElementById('topbar-user').textContent = me.user + (me.isRoot ? ' (root)' : '');
+    document.getElementById('password-btn').hidden = !!me.isRoot;
     document.querySelectorAll('#nav a[data-admin]').forEach((a) => { a.hidden = !me.admin; });
     document.querySelectorAll('#nav a[data-user]').forEach((a) => { a.hidden = me.admin; });
     document.getElementById('sidebar-foot').textContent = 'OpenS3 ' + me.version + ' · ' + me.region;
@@ -103,6 +104,14 @@
       } });
   }
   app.openSettings = openSettings;
+  document.getElementById('password-btn').addEventListener('click', async () => {
+    const cur = h('input.input', { type: 'password', autocomplete: 'current-password', required: true });
+    const nw = h('input.input', { type: 'password', autocomplete: 'new-password', required: true, minLength: 8 });
+    const again = h('input.input', { type: 'password', autocomplete: 'new-password', required: true, minLength: 8 });
+    const ok = await modal({ title: 'Change console password', submit: 'Change', body: [ui.field('Current password', cur), ui.field('New password', nw, 'At least 8 characters.'), ui.field('Repeat new password', again)],
+      onSubmit: async () => { if (nw.value !== again.value) throw new Error('the new passwords do not match'); await api.put('me/password', { current: cur.value, new: nw.value }); } });
+    if (ok) toast('Password changed', 'success');
+  });
   document.getElementById('settings-btn').addEventListener('click', openSettings);
   // Formats and page size need a re-render; density and theme are CSS only.
   window.addEventListener('settingschange', (e) => { if (e.detail.changed.some((k) => !['density', 'theme'].includes(k))) route(); });

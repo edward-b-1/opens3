@@ -2,7 +2,9 @@ package iam
 
 import (
 	"bytes"
+	"crypto/pbkdf2"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
@@ -19,15 +21,33 @@ import (
 
 // Errors.
 var (
-	ErrNotFound = errors.New("iam: not found")
-	ErrExists   = errors.New("iam: already exists")
-	ErrInvalid  = errors.New("iam: invalid argument")
-	ErrDisabled = errors.New("iam: credentials disabled")
-	ErrExpired  = errors.New("iam: credentials expired")
-	ErrBadToken = errors.New("iam: invalid session token")
-	ErrBuiltin  = errors.New("iam: built-in policy cannot be modified")
-	ErrRoot     = errors.New("iam: root account cannot be modified")
+	ErrNotFound    = errors.New("iam: not found")
+	ErrExists      = errors.New("iam: already exists")
+	ErrInvalid     = errors.New("iam: invalid argument")
+	ErrDisabled    = errors.New("iam: credentials disabled")
+	ErrExpired     = errors.New("iam: credentials expired")
+	ErrBadToken    = errors.New("iam: invalid session token")
+	ErrBuiltin     = errors.New("iam: built-in policy cannot be modified")
+	ErrRoot        = errors.New("iam: root account cannot be modified")
+	ErrBadPassword = errors.New("iam: invalid user name or password")
+	ErrNoPassword  = errors.New("iam: user has no console password")
 )
+
+// Credential formats: a 20-character upper-case alphanumeric access key ID
+// and a 40-character secret, both random, matching the shape AWS uses.
+const (
+	AccessKeyLength   = 20
+	SecretKeyLength   = 40
+	accessKeyAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	pbkdf2Iterations  = 600000
+	minPasswordLength = 8
+)
+
+// GenerateAccessKey returns a random access key ID.
+func GenerateAccessKey() string { return randomToken(AccessKeyLength, accessKeyAlphabet) }
+
+// GenerateSecretKey returns a random secret access key.
+func GenerateSecretKey() string { return randomToken(SecretKeyLength, "") }
 
 const (
 	nsUser   = "i/u/"
@@ -448,6 +468,76 @@ func remove(l []string, s string) []string {
 	return out
 }
 
+// --- console passwords ---------------------------------------------------
+
+func hashPassword(pw string, salt []byte) []byte {
+	h, err := pbkdf2.Key(sha256.New, pw, salt, pbkdf2Iterations, 32)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+// SetPassword sets a user's console password.
+func (s *Store) SetPassword(name, password string) error {
+	if len(password) < minPasswordLength {
+		return fmt.Errorf("%w: password must be at least %d characters", ErrInvalid, minPasswordLength)
+	}
+	if name == "root" || name == s.cfg.RootAccessKey {
+		return ErrRoot
+	}
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return err
+	}
+	hash := hashPassword(password, salt)
+	return s.UpdateUser(name, func(u *User) error {
+		u.PasswordHash, u.PasswordSalt, u.PasswordSet = hash, salt, time.Now().UTC()
+		return nil
+	})
+}
+
+// ClearPassword removes a user's console password.
+func (s *Store) ClearPassword(name string) error {
+	return s.UpdateUser(name, func(u *User) error {
+		u.PasswordHash, u.PasswordSalt, u.PasswordSet = nil, nil, time.Time{}
+		return nil
+	})
+}
+
+// VerifyPassword checks a console sign-in. The root account signs in with
+// the configured root user name and password. Failures take comparable time
+// whether or not the user exists.
+func (s *Store) VerifyPassword(name, password string) (*Identity, error) {
+	if name == s.cfg.RootAccessKey {
+		if subtle.ConstantTimeCompare([]byte(password), []byte(s.cfg.RootSecretKey)) == 1 {
+			return &Identity{IsRoot: true, AccountID: s.cfg.AccountID}, nil
+		}
+		return nil, ErrBadPassword
+	}
+	var u *User
+	var polices []json.RawMessage
+	err := s.kv.View(func(tx kv.Txn) error {
+		var err error
+		if u, err = getUser(tx, name); err != nil {
+			return err
+		}
+		polices, err = s.effectivePolicies(tx, u)
+		return err
+	})
+	if err != nil || !u.HasPassword() {
+		hashPassword(password, make([]byte, 16)) // burn comparable time
+		return nil, ErrBadPassword
+	}
+	if subtle.ConstantTimeCompare(hashPassword(password, u.PasswordSalt), u.PasswordHash) != 1 {
+		return nil, ErrBadPassword
+	}
+	if !u.Enabled {
+		return nil, ErrDisabled
+	}
+	return &Identity{User: u, AccountID: s.cfg.AccountID, Policies: polices}, nil
+}
+
 // --- keys ----------------------------------------------------------------
 
 // CreateKey adds an access key to a user. kind is KindUser or KindService.
@@ -457,10 +547,10 @@ func (s *Store) CreateKey(user, accessKey, secret, kind string, sessionPolicy js
 		return nil, "", fmt.Errorf("%w: bad key kind", ErrInvalid)
 	}
 	if accessKey == "" {
-		accessKey = randomToken(20, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+		accessKey = GenerateAccessKey()
 	}
 	if secret == "" {
-		secret = randomToken(40, "")
+		secret = GenerateSecretKey()
 	}
 	if len(accessKey) < 3 || len(secret) < 8 || accessKey == s.cfg.RootAccessKey {
 		return nil, "", fmt.Errorf("%w: access key must be >= 3 and secret >= 8 characters", ErrInvalid)
@@ -577,8 +667,8 @@ func (s *Store) AssumeRole(id *Identity, sessionPolicy json.RawMessage, duration
 		// user that inherits full access via IsRoot handling in Resolve.
 		user = "root"
 	}
-	ak = randomToken(20, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
-	sk = randomToken(40, "")
+	ak = GenerateAccessKey()
+	sk = GenerateSecretKey()
 	token = randomToken(64, "")
 	exp = time.Now().UTC().Add(duration)
 	// Chain session policies: an STS session created from a service

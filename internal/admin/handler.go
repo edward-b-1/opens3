@@ -100,6 +100,8 @@ func (h *Handler) routes() {
 	reg("POST /users/{name}/enable", "EnableUser", h.setUserStatus(true))
 	reg("POST /users/{name}/disable", "DisableUser", h.setUserStatus(false))
 	reg("PUT /users/{name}/policies", "SetUserPolicies", h.setUserPolicies)
+	reg("PUT /users/{name}/password", "SetUserPassword", h.setUserPassword)
+	reg("DELETE /users/{name}/password", "SetUserPassword", h.clearUserPassword)
 
 	reg("GET /keys", "ListKeys", h.listKeys)
 	reg("POST /keys", "AddKey", h.createKey)
@@ -357,7 +359,7 @@ func (h *Handler) health(c *req) (any, error) {
 // --- users ---------------------------------------------------------------
 
 func userInfo(u *iam.User) *UserInfo {
-	return &UserInfo{Name: u.Name, Enabled: u.Enabled, Policies: nonNil(u.Policies), Groups: nonNil(u.Groups), Created: u.Created}
+	return &UserInfo{Name: u.Name, Enabled: u.Enabled, Policies: nonNil(u.Policies), Groups: nonNil(u.Groups), Created: u.Created, HasPassword: u.HasPassword()}
 }
 
 func nonNil(l []string) []string {
@@ -404,9 +406,17 @@ func (h *Handler) putUser(c *req) (any, error) {
 		return nil, err
 	}
 	st := h.opt.IAM
+	var creds *Credentials
 	if _, err := st.GetUser(name); errors.Is(err, iam.ErrNotFound) {
 		if err := st.CreateUser(name, in.SecretKey, nonNil(in.Policies)); err != nil {
 			return nil, err
+		}
+		if in.GenerateKey {
+			k, secret, err := st.CreateKey(name, "", "", iam.KindUser, nil, nil, "")
+			if err != nil {
+				return nil, err
+			}
+			creds = &Credentials{KeyInfo: keyInfo(k), SecretKey: secret}
 		}
 	} else if err != nil {
 		return nil, err
@@ -428,11 +438,44 @@ func (h *Handler) putUser(c *req) (any, error) {
 			}
 		}
 	}
+	if in.Password != "" {
+		if err := st.SetPassword(name, in.Password); err != nil {
+			return nil, err
+		}
+	}
 	u, err := st.GetUser(name)
 	if err != nil {
 		return nil, err
 	}
-	return userInfo(u), nil
+	out := userInfo(u)
+	out.Credentials = creds
+	return out, nil
+}
+
+func (h *Handler) setUserPassword(c *req) (any, error) {
+	name := c.path("name")
+	if err := checkNotRoot(name); err != nil {
+		return nil, err
+	}
+	var in PasswordRequest
+	if err := c.decode(&in); err != nil {
+		return nil, err
+	}
+	if err := h.opt.IAM.SetPassword(name, in.Password); err != nil {
+		return nil, err
+	}
+	return map[string]bool{"ok": true}, nil
+}
+
+func (h *Handler) clearUserPassword(c *req) (any, error) {
+	name := c.path("name")
+	if err := checkNotRoot(name); err != nil {
+		return nil, err
+	}
+	if err := h.opt.IAM.ClearPassword(name); err != nil {
+		return nil, err
+	}
+	return map[string]bool{"ok": true}, nil
 }
 
 func (h *Handler) deleteUser(c *req) (any, error) {

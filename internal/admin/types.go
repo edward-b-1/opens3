@@ -63,6 +63,10 @@ type UserInfo struct {
 	Policies []string  `json:"policies"`
 	Groups   []string  `json:"groups"`
 	Created  time.Time `json:"created"`
+	// HasPassword reports whether a console password is set.
+	HasPassword bool `json:"has_password"`
+	// Credentials is set only in the response that created a generated key.
+	Credentials *Credentials `json:"credentials,omitempty"`
 }
 
 // PutUserRequest creates or updates a user. On creation an access key
@@ -70,8 +74,20 @@ type UserInfo struct {
 // convention); on update a non-empty SecretKey rotates (or creates) that
 // key. A nil Policies leaves the attached policies unchanged.
 type PutUserRequest struct {
+	// SecretKey creates a MinIO-style key whose ID is the user name
+	// (migration only; the console never does this).
 	SecretKey string   `json:"secret_key,omitempty"`
 	Policies  []string `json:"policies"`
+	// Password sets the console password.
+	Password string `json:"password,omitempty"`
+	// GenerateKey creates a generated access key pair on creation; the
+	// credentials are returned once in UserInfo.Credentials.
+	GenerateKey bool `json:"generate_key,omitempty"`
+}
+
+// PasswordRequest sets a console password.
+type PasswordRequest struct {
+	Password string `json:"password"`
 }
 
 // PoliciesRequest sets the policies attached to a user.

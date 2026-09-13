@@ -31,7 +31,10 @@ commands:
   info                                    server version, uptime, usage
   health                                  readiness check
   user list | info NAME
-  user add NAME [--secret S] [--policy p1,p2]
+  user add NAME [--policy p1,p2] [--password P] [--no-key]
+                                          generates an access key pair (shown once);
+                                          --secret S creates a MinIO-style key instead
+  user password NAME (--password P | --clear)   set or remove the console password
   user rm NAME | enable NAME | disable NAME
   user policy NAME [p1,p2]                set attached policies (empty detaches all)
   key list [--user U]
@@ -295,8 +298,11 @@ func (a *adminCLI) user(args []string) error {
 		return err
 	}
 	fs := newFlags("user " + cmd)
-	secret := fs.String("secret", "", "secret key")
+	secret := fs.String("secret", "", "MinIO-style: create a key whose ID is the user name with this secret (migration only)")
 	policies := fs.String("policy", "", "comma-separated policies")
+	password := fs.String("password", "", "console password")
+	noKey := fs.Bool("no-key", false, "do not generate an access key")
+	clear := fs.Bool("clear", false, "remove the console password")
 	pos, err := parseInterleaved(fs, rest)
 	if err != nil {
 		return usageError(err.Error())
@@ -321,7 +327,7 @@ func (a *adminCLI) user(args []string) error {
 		if err := needArg(pos, 1, "user name"); err != nil {
 			return err
 		}
-		in := admin.PutUserRequest{SecretKey: *secret}
+		in := admin.PutUserRequest{SecretKey: *secret, Password: *password, GenerateKey: *secret == "" && !*noKey}
 		if isSet(fs, "policy") {
 			in.Policies = splitList(*policies)
 		}
@@ -329,7 +335,27 @@ func (a *adminCLI) user(args []string) error {
 		if err != nil {
 			return err
 		}
-		return a.printUsers([]*admin.UserInfo{u})
+		if a.json {
+			return a.print(u, nil)
+		}
+		if err := a.printUsers([]*admin.UserInfo{u}); err != nil {
+			return err
+		}
+		if u.Credentials != nil {
+			fmt.Printf("\nAccess key: %s\nSecret key: %s\n(the secret is shown once and cannot be recovered)\n", u.Credentials.AccessKey, u.Credentials.SecretKey)
+		}
+		return nil
+	case "password":
+		if err := needArg(pos, 1, "user name"); err != nil {
+			return err
+		}
+		if *clear {
+			return a.c.ClearUserPassword(a.ctx, pos[0])
+		}
+		if *password == "" {
+			return usageError("use --password P to set or --clear to remove")
+		}
+		return a.c.SetUserPassword(a.ctx, pos[0], *password)
 	case "rm", "remove", "delete":
 		if err := needArg(pos, 1, "user name"); err != nil {
 			return err
