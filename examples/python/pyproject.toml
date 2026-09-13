@@ -1,0 +1,9 @@
+[project]
+name = "opens3-pyclient"
+version = "0.1.0"
+description = "boto3 smoke tests that push data at a running OpenS3 server"
+requires-python = ">=3.10"
+dependencies = ["boto3>=1.34"]
+
+[tool.uv]
+package = false
