@@ -129,6 +129,8 @@ func (h *Handler) routes() {
 	api("PUT /console/api/buckets/{bucket}/upload", h.upload)
 	api("POST /console/api/buckets/{bucket}/upload", h.upload)
 	api("POST /console/api/buckets/{bucket}/delete", h.deleteObjects)
+	api("POST /console/api/buckets/{bucket}/delete-prefix", h.deletePrefix)
+	api("GET /console/api/buckets/{bucket}/zip", h.zipPrefix)
 
 	api("GET /console/api/users", h.listUsers)
 	api("POST /console/api/users", h.createUser)

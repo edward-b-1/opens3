@@ -90,3 +90,24 @@ status matching the S3 error where one exists.
 The console has no separate listener. To keep it off the public
 internet, put the S3 endpoint behind a reverse proxy that does not
 forward `/console/`, or bind the server to an internal address.
+
+## Folders
+
+S3 has no folders; the browser shows key prefixes as folders. Two
+operations act on a whole prefix, as the MinIO console offered and the
+AWS console offers for deletion:
+
+- **Download folder** streams a zip archive of every current object under
+  the prefix (`GET /console/api/buckets/{bucket}/zip?prefix=...`). Entry
+  names are relative to the parent of the prefix. Objects the caller may not
+  read and SSE-C objects (which need the customer key) are left out and
+  listed in `OPENS3-SKIPPED.txt` inside the archive. "Download all" on a
+  bucket's root zips the whole bucket.
+- **Delete folder** (`POST /console/api/buckets/{bucket}/delete-prefix`)
+  lists and deletes everything under the prefix in pages of a thousand. The
+  console asks for confirmation with the object count and size from a dry
+  run first. With "Show versions" on, every version and delete marker is
+  removed permanently; otherwise current objects are deleted, which in a
+  versioned bucket creates delete markers. Objects protected by object lock
+  are reported as failures and left in place. Folders can also be selected
+  with the checkboxes and removed with "Delete selected".

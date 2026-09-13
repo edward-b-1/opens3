@@ -80,5 +80,6 @@
     qs,
     downloadURL: (bucket, key, versionId, inline) =>
       BASE + 'buckets/' + encodeURIComponent(bucket) + '/download' + qs({ key, versionId, inline: inline ? '1' : '' }),
+    zipURL: (bucket, prefix) => BASE + 'buckets/' + encodeURIComponent(bucket) + '/zip' + qs({ prefix }),
   };
 })();
