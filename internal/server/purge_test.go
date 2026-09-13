@@ -34,8 +34,10 @@ func TestPurgeExpiredCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := s.PurgeExpiredCredentials(); n != 1 {
-		t.Fatalf("purged %d, want 1", n)
+	// The startup sweep runs concurrently, so the count here may be 0 or 1;
+	// what matters is the outcome.
+	if n := s.PurgeExpiredCredentials(); n > 1 {
+		t.Fatalf("purged %d, want at most 1", n)
 	}
 	if _, err := s.IAM.GetKey(dead.AccessKey); err == nil {
 		t.Fatal("expired key should be gone")
