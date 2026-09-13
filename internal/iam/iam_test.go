@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/Birdsall/opens3/internal/kms"
 	"gitlab.com/Birdsall/opens3/internal/kv"
 	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/sse"
 )
 
 func openStore(t *testing.T) *Store {
@@ -19,7 +19,7 @@ func openStore(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	s, err := Open(db, Config{RootAccessKey: "rootuser", RootSecretKey: "rootsecret", MasterKey: sse.DeriveKey([]byte("m"), "iam")})
+	s, err := Open(db, Config{RootAccessKey: "rootuser", RootSecretKey: "rootsecret", Wrapper: kms.TestMaster()})
 	if err != nil {
 		t.Fatal(err)
 	}

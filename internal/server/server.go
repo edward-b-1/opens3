@@ -113,16 +113,35 @@ func New(cfg Config) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
-	master := cfg.MasterKey
-	if master == "" {
-		master = "derived:" + cfg.RootPassword
+	var master *kms.Master
+	if cfg.MasterKey != "" {
+		master, err = kms.MasterFromMaterial([]byte(cfg.MasterKey))
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+	} else {
+		var created bool
+		master, created, err = kms.LoadOrCreateMasterFile(filepath.Join(cfg.Root, "meta", "master.keys"))
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		if created {
+			cfg.Log.Warn("generated a new master key; back it up, everything encrypted and every stored secret depends on it",
+				"file", filepath.Join(cfg.Root, "meta", "master.keys"))
+		}
 	}
-	k, err := kms.NewLocal(db, []byte(master))
+	k, err := kms.NewLocal(db, master)
 	if err != nil {
 		db.Close()
+		if errors.Is(err, kms.ErrMasterMismatch) {
+			return nil, fmt.Errorf("%w: the data directory was created with a different master key (source %s)", err, master.Source())
+		}
 		return nil, err
 	}
-	ia, err := iam.Open(db, iam.Config{RootAccessKey: cfg.RootUser, RootSecretKey: cfg.RootPassword, MasterKey: k.MasterKey(), AccountID: cfg.AccountID})
+	cfg.Log.Info("master key", "source", master.Source(), "fingerprint", master.Fingerprint(), "keys", master.Keys())
+	ia, err := iam.Open(db, iam.Config{RootAccessKey: cfg.RootUser, RootSecretKey: cfg.RootPassword, Wrapper: master, AccountID: cfg.AccountID})
 	if err != nil {
 		db.Close()
 		return nil, err

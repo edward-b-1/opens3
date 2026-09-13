@@ -16,7 +16,6 @@ import (
 
 	"gitlab.com/Birdsall/opens3/internal/kv"
 	"gitlab.com/Birdsall/opens3/internal/policy"
-	"gitlab.com/Birdsall/opens3/internal/sse"
 )
 
 // Errors.
@@ -60,10 +59,16 @@ const (
 type Config struct {
 	RootAccessKey string
 	RootSecretKey string
-	// MasterKey (32 bytes) encrypts stored secret keys.
-	MasterKey []byte
+	// Wrapper encrypts stored secret keys (the KMS master key ring).
+	Wrapper SecretWrapper
 	// AccountID appears in principal ARNs.
 	AccountID string
+}
+
+// SecretWrapper wraps and unwraps stored secrets (implemented by kms.Master).
+type SecretWrapper interface {
+	Wrap(data, aad []byte) ([]byte, error)
+	Unwrap(wrapped, aad []byte) ([]byte, error)
 }
 
 // Store persists identities in the KV store.
@@ -78,8 +83,8 @@ type Store struct {
 
 // Open creates the store and ensures the built-in policies exist.
 func Open(db kv.Store, cfg Config) (*Store, error) {
-	if len(cfg.MasterKey) != sse.KeySize {
-		return nil, fmt.Errorf("%w: master key must be %d bytes", ErrInvalid, sse.KeySize)
+	if cfg.Wrapper == nil {
+		return nil, fmt.Errorf("%w: a secret wrapper (master key) is required", ErrInvalid)
 	}
 	if cfg.RootAccessKey == "" || cfg.RootSecretKey == "" {
 		return nil, fmt.Errorf("%w: root credentials are required", ErrInvalid)
@@ -128,7 +133,7 @@ func mustJSON(v any) []byte {
 }
 
 func (s *Store) wrapSecret(secret string) []byte {
-	w, err := sse.Wrap(s.cfg.MasterKey, []byte(secret), []byte("iam-secret"))
+	w, err := s.cfg.Wrapper.Wrap([]byte(secret), []byte("iam-secret"))
 	if err != nil {
 		panic(err)
 	}
@@ -136,7 +141,7 @@ func (s *Store) wrapSecret(secret string) []byte {
 }
 
 func (s *Store) unwrapSecret(w []byte) (string, error) {
-	b, err := sse.Unwrap(s.cfg.MasterKey, w, []byte("iam-secret"))
+	b, err := s.cfg.Wrapper.Unwrap(w, []byte("iam-secret"))
 	if err != nil {
 		return "", err
 	}

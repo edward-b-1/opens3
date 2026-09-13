@@ -65,13 +65,26 @@ The literal string `null` is the version ID of null versions.
 
 ## Keys and secrets
 
-- The **KMS master key** is `SHA-256("opens3-sse-v1:kms-master:" || material)`
-  where `material` is `OPENS3_MASTER_KEY`, or `derived:<root password>` when
-  unset. Everything wrapped (`i/k/*.sw`, `i/kms/*.w`, `sse.w` for SSE-S3)
-  depends on it. **Back it up.** Losing it makes encrypted objects and
-  stored secrets unrecoverable; the S3 API and plaintext objects keep
-  working.
-- SSE-S3 data keys are wrapped with the master key with the bucket name as
+- The **master key ring** lives in `meta/master.keys` (JSON, mode 0600):
+  a list of random 32-byte keys, oldest first. The newest key wraps; every
+  key can unwrap, so rotation is adding a key and re-wrapping at leisure.
+  It is generated on first start and is never derived from a password.
+  `OPENS3_MASTER_KEY` (at least 32 characters of random material, e.g.
+  `openssl rand -base64 32`) replaces the file with a key stretched from
+  that material by SHA-256, for operators who keep the key outside the
+  data directory (a secret manager, boot-time environment).
+- A key-check value under `i/kms/.master-check` lets the server refuse to
+  start with the wrong master key instead of failing on the first decrypt.
+- Everything wrapped (`i/k/*.sw`, `i/kms/*.w`, `sse.w` for SSE-S3) depends
+  on the ring. **Back it up.** Losing it makes encrypted objects and every
+  stored access-key secret unrecoverable; plaintext objects keep working.
+- What at-rest encryption protects depends on where the ring is kept: with
+  the file beside the data it protects object files copied without the
+  metadata directory (a replaced disk, a partial backup); with the key in
+  the environment it protects the whole data directory; only an external
+  key service (planned) separates key custody from the server itself.
+  SSE-C objects are the exception: the server never holds their key.
+- SSE-S3 data keys are wrapped with the master ring with the bucket name as
   AAD; SSE-KMS with the named key material and the encryption context as
   AAD; SSE-C with the customer's key and the AAD `ssec`.
 

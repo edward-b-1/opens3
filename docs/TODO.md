@@ -60,6 +60,12 @@ Move an item to "Done" with the commit that closed it.
 9. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
    `aws:kms`; either implement the second AES layer or reject the value.
 
+10. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
+    stopped) adds a new key to the ring; `opens3 master-key rewrap` re-wraps
+    every stored secret, KMS key and SSE-S3 data key under the newest key so
+    old keys can be dropped. Later: an external key service (Vault or
+    KMIP) so key custody is separate from the server.
+
 ## Deferred
 
 - **MinIO admin API compatibility.** Serve MinIO's admin protocol under

@@ -48,17 +48,22 @@ func run(root, rootUser, rootPass, altUser, altSecret, tenantUser, tenantSecret 
 		return err
 	}
 	defer db.Close()
-	// Mirror internal/server.New: the KMS master key defaults to material
-	// derived from the root password (OPENS3_MASTER_KEY overrides).
-	master := os.Getenv("OPENS3_MASTER_KEY")
-	if master == "" {
-		master = "derived:" + rootPass
+	// Mirror internal/server.New: the KMS master key ring lives in <root>/meta/master.keys
+	// (OPENS3_MASTER_KEY overrides), exactly as server.New does.
+	var master *kms.Master
+	if m := os.Getenv("OPENS3_MASTER_KEY"); m != "" {
+		master, err = kms.MasterFromMaterial([]byte(m))
+	} else {
+		master, _, err = kms.LoadOrCreateMasterFile(filepath.Join(root, "meta", "master.keys"))
 	}
-	k, err := kms.NewLocal(db, []byte(master))
 	if err != nil {
 		return err
 	}
-	ia, err := iam.Open(db, iam.Config{RootAccessKey: rootUser, RootSecretKey: rootPass, MasterKey: k.MasterKey(), AccountID: os.Getenv("OPENS3_ACCOUNT_ID")})
+	k, err := kms.NewLocal(db, master)
+	if err != nil {
+		return err
+	}
+	ia, err := iam.Open(db, iam.Config{RootAccessKey: rootUser, RootSecretKey: rootPass, Wrapper: master, AccountID: os.Getenv("OPENS3_ACCOUNT_ID")})
 	if err != nil {
 		return err
 	}

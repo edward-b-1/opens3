@@ -33,8 +33,10 @@ bin/opens3 admin user add alice --secret alicesecret --policy readwrite
 ```
 
 The console is at http://localhost:9000/console/, health at
-`/opens3/health/ready`, Prometheus metrics at `/opens3/metrics`. Set
-`OPENS3_MASTER_KEY` in production and back it up (`docs/FORMAT.md`). For
+`/opens3/health/ready`, Prometheus metrics at `/opens3/metrics`. A
+random master key is generated into `<root>/meta/master.keys` on first
+start: back it up, or supply your own with `OPENS3_MASTER_KEY`
+(`docs/FORMAT.md`). For
 TLS set `OPENS3_TLS_CERT` and `OPENS3_TLS_KEY`; plain-HTTP requests to the
 same port are then redirected to https.
 Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.

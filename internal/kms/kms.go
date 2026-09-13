@@ -49,24 +49,44 @@ type Key struct {
 
 // Local is the built-in KMS.
 type Local struct {
-	master []byte
+	master *Master
 	kv     kv.Store
 }
 
-// NewLocal creates the local KMS and ensures the default key exists.
-func NewLocal(db kv.Store, masterMaterial []byte) (*Local, error) {
-	if len(masterMaterial) < 8 {
-		return nil, errors.New("kms: master key material too short")
+const checkKey = nsKey + ".master-check"
+
+// NewLocal creates the local KMS over a master key ring, verifies the ring
+// matches the data directory (a key-check value written on first start)
+// and ensures the default key exists.
+func NewLocal(db kv.Store, master *Master) (*Local, error) {
+	if master == nil || master.Keys() == 0 {
+		return nil, errors.New("kms: no master key")
 	}
-	l := &Local{master: sse.DeriveKey(masterMaterial, "kms-master"), kv: db}
+	l := &Local{master: master, kv: db}
+	err := db.Update(func(tx kv.Txn) error {
+		if b, err := tx.Get([]byte(checkKey)); err == nil {
+			if _, err := master.Unwrap(b, []byte("master-check")); err != nil {
+				return ErrMasterMismatch
+			}
+			return nil
+		}
+		w, err := master.Wrap([]byte("opens3-master-check"), []byte("master-check"))
+		if err != nil {
+			return err
+		}
+		return tx.Put([]byte(checkKey), w)
+	})
+	if err != nil {
+		return nil, err
+	}
 	if err := l.CreateKey(DefaultKeyID); err != nil && !errors.Is(err, ErrKeyExists) {
 		return nil, err
 	}
 	return l, nil
 }
 
-// MasterKey returns the derived master key (for IAM secret wrapping).
-func (l *Local) MasterKey() []byte { return l.master }
+// Master returns the master key ring (IAM wraps stored secrets with it).
+func (l *Local) Master() *Master { return l.master }
 
 func contextAAD(ctx map[string]string) []byte {
 	if len(ctx) == 0 {
@@ -90,7 +110,7 @@ func (l *Local) CreateKey(id string) error {
 		return ErrInvalidKey
 	}
 	material := sse.NewDEK()
-	w, err := sse.Wrap(l.master, material, []byte("kms-key:"+id))
+	w, err := l.master.Wrap(material, []byte("kms-key:"+id))
 	if err != nil {
 		return err
 	}
@@ -110,6 +130,9 @@ func (l *Local) ListKeys() ([]Key, error) {
 		it := tx.Seek([]byte(nsKey))
 		defer it.Close()
 		for ; it.Valid() && bytes.HasPrefix(it.Key(), []byte(nsKey)); it.Next() {
+			if string(it.Key()) == checkKey {
+				continue
+			}
 			var k Key
 			if err := json.Unmarshal(it.Value(), &k); err != nil {
 				return err
@@ -151,7 +174,7 @@ func (l *Local) keyMaterial(id string) ([]byte, error) {
 	if k.Disabled {
 		return nil, fmt.Errorf("kms: key %s is disabled", id)
 	}
-	return sse.Unwrap(l.master, k.Wrapped, []byte("kms-key:"+id))
+	return l.master.Unwrap(k.Wrapped, []byte("kms-key:"+id))
 }
 
 // KeyExists implements KMS.
@@ -162,24 +185,24 @@ func (l *Local) KeyExists(id string) bool {
 
 // Wrap implements KMS.
 func (l *Local) Wrap(keyID string, dek []byte, context map[string]string) ([]byte, error) {
-	kek := l.master
-	if keyID != "" {
-		var err error
-		if kek, err = l.keyMaterial(keyID); err != nil {
-			return nil, err
-		}
+	if keyID == "" {
+		return l.master.Wrap(dek, contextAAD(context))
+	}
+	kek, err := l.keyMaterial(keyID)
+	if err != nil {
+		return nil, err
 	}
 	return sse.Wrap(kek, dek, contextAAD(context))
 }
 
 // Unwrap implements KMS.
 func (l *Local) Unwrap(keyID string, wrapped []byte, context map[string]string) ([]byte, error) {
-	kek := l.master
-	if keyID != "" {
-		var err error
-		if kek, err = l.keyMaterial(keyID); err != nil {
-			return nil, err
-		}
+	if keyID == "" {
+		return l.master.Unwrap(wrapped, contextAAD(context))
+	}
+	kek, err := l.keyMaterial(keyID)
+	if err != nil {
+		return nil, err
 	}
 	return sse.Unwrap(kek, wrapped, contextAAD(context))
 }

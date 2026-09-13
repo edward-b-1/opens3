@@ -63,7 +63,7 @@ func newService(t *testing.T) *object.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	k, err := kms.NewLocal(db, []byte("test-master-key-material"))
+	k, err := kms.NewLocal(db, kms.TestMaster())
 	if err != nil {
 		t.Fatal(err)
 	}
