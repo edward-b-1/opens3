@@ -133,10 +133,10 @@ identityTabs.keys = async function (body) {
     kind.addEventListener('change', syncKind);
     syncKind();
     const r = await modal({ title: 'Create access key', submit: 'Create', wide: true,
-      body: [field('User', user), field('Kind', kind), field('Description', desc), field('Expires', expires, 'Optional. The key stops working at the end of this day, UTC.'),
+      body: [field('User', user), field('Kind', kind), field('Description', desc), field('Expires on', expires, 'Optional. The key stops working at 00:00 UTC on this date.'),
         h('p.muted.small', 'The access key ID and secret are generated and shown once. A session policy restricts a service account to a subset of the user\'s permissions; it can never grant more.'), pol],
       onSubmit: () => api.post('keys', { user: user.value, kind: kind.value, description: desc.value, sessionPolicy: kind.value === 'service' ? pol.value() : undefined,
-        expires: expires.value ? new Date(expires.value + 'T23:59:59Z').toISOString() : undefined }) });
+        expires: expires.value ? new Date(expires.value + 'T00:00:00Z').toISOString() : undefined }) });
     if (r) { await showSecret(r); reload(); }
   }
   async function edit(k) {
