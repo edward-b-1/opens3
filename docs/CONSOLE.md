@@ -111,3 +111,21 @@ AWS console offers for deletion:
   versioned bucket creates delete markers. Objects protected by object lock
   are reported as failures and left in place. Folders can also be selected
   with the checkboxes and removed with "Delete selected".
+
+## Settings
+
+The gear button in the header (or the `,` key) opens the settings dialog.
+Settings are stored in the browser's local storage, so they are per browser
+and per device, never sent to the server, and survive logging out:
+
+- **Density**: comfortable or compact (tighter rows, controls and spacing).
+- **Theme**: follow the system preference, or force light or dark.
+- **Dates**: absolute, or relative ("3 hours ago") with the absolute time as
+  a tooltip; **time zone** local or UTC.
+- **Sizes**: binary units (KiB, MiB), decimal units (kB, MB) or exact bytes.
+- **Rows per page** fetched in listings (100, 300 or 1000).
+- **Folder markers**: whether the empty objects that represent created
+  folders are listed.
+
+"Reset to defaults" restores the built-in values. Density and theme apply
+instantly through CSS; the other settings re-render the current page.

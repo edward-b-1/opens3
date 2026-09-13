@@ -1,4 +1,4 @@
-/* OpenS3 console — plain CSS, light and dark via prefers-color-scheme. */
+/* OpenS3 console — plain CSS; theme and density come from settings.js. */
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -20,8 +20,30 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+/* Theme: the system preference applies unless data-theme on <html> (set
+   from the settings menu) picks light or dark explicitly. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #14161a;
+    --surface: #1d2026;
+    --surface-2: #262a32;
+    --fg: #e6e8ec;
+    --muted: #9aa1ad;
+    --border: #343943;
+    --accent: #6d9cff;
+    --accent-fg: #0c1220;
+    --accent-soft: #1f2a44;
+    --danger: #ff6b6b;
+    --danger-soft: #3a1f22;
+    --ok: #6fcf7a;
+    --ok-soft: #1d3322;
+    --warn: #f5b74f;
+    --warn-soft: #3a2f16;
+    --shadow: 0 8px 30px rgba(0, 0, 0, .5);
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14161a;
     --surface: #1d2026;
     --surface-2: #262a32;
@@ -192,3 +214,20 @@ pre.code { background: var(--surface-2); border: 1px solid var(--border); border
 .ficon-slides { color: #e0742a; }
 .ficon-code { color: #5b6b7b; }
 .ficon-data { color: #7f8c3a; }
+
+/* Compact density (settings menu): tighter rows, controls and spacing. */
+html[data-density="compact"] body { font-size: 13px; line-height: 1.35; }
+html[data-density="compact"] .app { grid-template-rows: 42px 1fr; }
+html[data-density="compact"] th, html[data-density="compact"] td { padding: 3px 8px; }
+html[data-density="compact"] .btn { padding: 3px 9px; }
+html[data-density="compact"] .btn-sm { padding: 1px 6px; font-size: 12px; }
+html[data-density="compact"] .input, html[data-density="compact"] select, html[data-density="compact"] textarea { padding: 3px 7px; }
+html[data-density="compact"] .card { padding: 10px 12px; margin-bottom: 10px; }
+html[data-density="compact"] .toolbar { gap: 6px; margin-bottom: 8px; }
+html[data-density="compact"] h1 { font-size: 17px; margin-bottom: 8px; }
+html[data-density="compact"] h2 { font-size: 14px; }
+html[data-density="compact"] .main { padding: 12px 16px; }
+html[data-density="compact"] .ficon, html[data-density="compact"] .ficon svg { width: 14px; height: 14px; }
+.settings-grid { display: grid; grid-template-columns: max-content 1fr; gap: 10px 14px; align-items: center; }
+.settings-grid label { color: var(--muted); }
+.settings-grid select { width: auto; min-width: 160px; }

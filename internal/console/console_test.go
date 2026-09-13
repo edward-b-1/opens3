@@ -387,3 +387,38 @@ func mustURL(t *testing.T, s string) *url.URL {
 	}
 	return u
 }
+
+func TestSettingsAssetsServed(t *testing.T) {
+	e := newEnv(t)
+	for _, f := range []string{"settings.js", "icons.js", "index.html"} {
+		resp, out := e.do(e.c, "GET", "/console/"+f, nil, nil)
+		body, _ := out["_body"].(string)
+		if resp.StatusCode != 200 || body == "" {
+			t.Fatalf("%s: %d", f, resp.StatusCode)
+		}
+		if resp.Header.Get("ETag") == "" || resp.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatalf("%s: caching headers %v", f, resp.Header)
+		}
+		switch f {
+		case "settings.js":
+			if !strings.Contains(body, "localStorage") {
+				t.Fatal("settings.js should use localStorage")
+			}
+		case "index.html":
+			if !strings.Contains(body, `id="settings-btn"`) || !strings.Contains(body, "settings.js") {
+				t.Fatal("index.html should load settings.js and show the settings button")
+			}
+		}
+	}
+	// A conditional request is answered with 304.
+	req, _ := http.NewRequest("GET", e.ts.URL+"/console/settings.js", nil)
+	first, _ := e.c.Do(req)
+	first.Body.Close()
+	req2, _ := http.NewRequest("GET", e.ts.URL+"/console/settings.js", nil)
+	req2.Header.Set("If-None-Match", first.Header.Get("ETag"))
+	second, _ := e.c.Do(req2)
+	second.Body.Close()
+	if second.StatusCode != http.StatusNotModified {
+		t.Fatalf("conditional GET: %d", second.StatusCode)
+	}
+}

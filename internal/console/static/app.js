@@ -1,7 +1,7 @@
 // app.js — hash router, session state and global chrome. Views live in
 // views/*.js and register themselves on window.views.
 (function () {
-  const { clear, error, toast } = ui;
+  const { clear, error, toast, h, modal } = ui;
   const app = { me: null, path: null };
   window.app = app;
 
@@ -72,11 +72,45 @@
     try { await api.post('logout'); } catch (e) { /* cookie is gone either way */ }
     showLogin();
   });
+  // Settings dialog: values live in localStorage (settings.js).
+  const settingLabels = {
+    density: ['Density', { comfortable: 'Comfortable', compact: 'Compact' }],
+    theme: ['Theme', { system: 'Follow system', light: 'Light', dark: 'Dark' }],
+    dateStyle: ['Dates', { absolute: 'Absolute (12 Sep 2026, 14:05)', relative: 'Relative (3 hours ago)' }],
+    timeZone: ['Time zone', { local: 'Local time', utc: 'UTC' }],
+    sizeUnits: ['Sizes', { binary: 'Binary units (KiB, MiB)', decimal: 'Decimal units (kB, MB)', bytes: 'Exact bytes' }],
+    pageSize: ['Rows per page', { 100: '100', 300: '300', 1000: '1000' }],
+    showMarkers: ['Folder markers', { true: 'Show empty folder marker objects', false: 'Hide them' }],
+  };
+  async function openSettings() {
+    const cur = settings.all();
+    const selects = {};
+    const grid = h('div.settings-grid');
+    for (const [key, [label, names]] of Object.entries(settingLabels)) {
+      const sel = h('select', { id: 'setting-' + key }, settings.options[key].map((v) => h('option', { value: String(v), selected: String(v) === String(cur[key]) }, names[v])));
+      selects[key] = sel;
+      grid.append(h('label', { htmlFor: 'setting-' + key }, label), sel);
+    }
+    const resetBtn = h('button.btn.btn-sm', { type: 'button', onClick: () => { for (const [k, sel] of Object.entries(selects)) sel.value = String(settings.defaults[k]); } }, 'Reset to defaults');
+    await modal({ title: 'Settings', submit: 'Apply', body: [grid, h('p.muted.small', { style: 'margin-top:12px' }, 'Stored in this browser only. ', resetBtn)],
+      onSubmit: () => {
+        const patch = {};
+        for (const [k, sel] of Object.entries(selects)) {
+          const v = sel.value;
+          patch[k] = typeof settings.defaults[k] === 'number' ? Number(v) : typeof settings.defaults[k] === 'boolean' ? v === 'true' : v;
+        }
+        settings.set(patch);
+      } });
+  }
+  app.openSettings = openSettings;
+  document.getElementById('settings-btn').addEventListener('click', openSettings);
+  // Formats and page size need a re-render; density and theme are CSS only.
+  window.addEventListener('settingschange', (e) => { if (e.detail.changed.some((k) => !['density', 'theme'].includes(k))) route(); });
   document.getElementById('nav-toggle').addEventListener('click', (e) => {
     const open = document.getElementById('nav').classList.toggle('open');
     e.currentTarget.setAttribute('aria-expanded', String(open));
   });
-  // Keyboard: "/" focuses the page filter, "r" reloads the view, "u" opens upload in the browser.
+  // Keyboard: "/" focuses the page filter, "r" reloads the view, "u" opens upload in the browser, "," opens settings.
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || !app.me) return;
     const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || document.getElementById('modal-root').firstChild;
@@ -84,6 +118,7 @@
     if (e.key === '/') { const f = document.querySelector('#main [data-filter]'); if (f) { e.preventDefault(); f.focus(); } }
     else if (e.key === 'r') { route(); }
     else if (e.key === 'u') { const b = document.querySelector('#main [data-upload]'); if (b) b.click(); }
+    else if (e.key === ',') { e.preventDefault(); openSettings(); }
   });
 
   api.me().then(showApp).catch(showLogin);

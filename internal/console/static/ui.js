@@ -66,19 +66,41 @@
   }
   const confirm = (title, text, submit = 'Delete') => modal({ title, body: h('p', text), submit, danger: true });
 
-  // Formatters.
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  // Formatters (consult window.settings when present).
+  const pref = (k, d) => (window.settings ? settings.get(k) : d);
+  const binUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  const decUnits = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
   function fmtBytes(n) {
     if (n === undefined || n === null) return '';
-    let i = 0; n = Number(n);
-    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    n = Number(n);
+    const mode = pref('sizeUnits', 'binary');
+    if (mode === 'bytes') return n.toLocaleString() + ' B';
+    const base = mode === 'decimal' ? 1000 : 1024, units = mode === 'decimal' ? decUnits : binUnits;
+    let i = 0;
+    while (n >= base && i < units.length - 1) { n /= base; i++; }
     return (i === 0 ? n : n.toFixed(n < 10 ? 2 : 1)) + ' ' + units[i];
+  }
+  function fmtRelative(d) {
+    const s = Math.round((Date.now() - d.getTime()) / 1000), abs = Math.abs(s), ago = s >= 0;
+    const f = (n, u) => (ago ? '' : 'in ') + n + ' ' + u + (n === 1 ? '' : 's') + (ago ? ' ago' : '');
+    if (abs < 45) return ago ? 'just now' : 'in a moment';
+    if (abs < 3600) return f(Math.round(abs / 60), 'minute');
+    if (abs < 86400) return f(Math.round(abs / 3600), 'hour');
+    if (abs < 30 * 86400) return f(Math.round(abs / 86400), 'day');
+    if (abs < 365 * 86400) return f(Math.round(abs / (30 * 86400)), 'month');
+    return f(Math.round(abs / (365 * 86400)), 'year');
   }
   function fmtDate(s) {
     if (!s) return '';
     const d = new Date(s);
     if (isNaN(d)) return s;
-    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const utc = pref('timeZone', 'local') === 'utc';
+    const absolute = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: utc ? 'UTC' : undefined }) + (utc ? ' UTC' : '');
+    if (pref('dateStyle', 'absolute') === 'relative') {
+      const el = h('span', { title: absolute }, fmtRelative(d));
+      return el;
+    }
+    return absolute;
   }
   function fmtDuration(sec) {
     sec = Math.floor(sec); const d = Math.floor(sec / 86400), hh = Math.floor(sec % 86400 / 3600), mm = Math.floor(sec % 3600 / 60);

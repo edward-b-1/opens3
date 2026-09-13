@@ -7,6 +7,7 @@
 <title>OpenS3 Console</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M9 11.5A7 4 0 0 1 23 11.5v9A7 4 0 0 1 9 20.5z' fill='none' stroke='white' stroke-width='2.2'/%3E%3Cellipse cx='16' cy='11.5' rx='7' ry='4' fill='none' stroke='white' stroke-width='2.2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<script src="settings.js"></script>
 </head>
 <body>
 <div id="app" class="app" hidden>
@@ -15,6 +16,7 @@
     <a class="brand" href="#/buckets"><span class="brand-mark" aria-hidden="true"></span>OpenS3</a>
     <div class="topbar-spacer"></div>
     <span class="topbar-user" id="topbar-user"></span>
+    <button class="btn btn-ghost icon-btn" id="settings-btn" aria-label="Settings" title="Settings (,)">&#9881;</button>
     <button class="btn btn-ghost" id="logout-btn">Log out</button>
   </header>
   <nav class="sidebar" id="nav" aria-label="Sections">

@@ -41,7 +41,7 @@ views.objects = async function (main, bucket, prefix) {
     st.loading = true;
     if (reset) { st.entries = []; st.next = null; st.selected.clear(); }
     try {
-      const params = { prefix, versions: st.versions ? '1' : '', max: 300 };
+      const params = { prefix, versions: st.versions ? '1' : '', max: settings.get('pageSize') };
       if (st.next) { params.after = st.next.after; params.afterVersion = st.next.afterVersion; }
       const r = await api.get('buckets/' + enc(bucket) + '/objects', params);
       st.entries = st.entries.concat(r.entries);
@@ -53,7 +53,7 @@ views.objects = async function (main, bucket, prefix) {
 
   function renderTable() {
     const q = filter.value.trim().toLowerCase();
-    const rows = st.entries.filter((e) => (e.prefix || e.key).toLowerCase().includes(q));
+    const rows = st.entries.filter((e) => (e.prefix || e.key).toLowerCase().includes(q) && (settings.get('showMarkers') || e.prefix || e.key !== prefix));
     const name = (e) => (e.prefix || e.key).slice(prefix.length) || '(folder marker)';
     const all = h('input', { type: 'checkbox', 'aria-label': 'Select all', onChange: () => { rows.forEach((e) => { all.checked ? st.selected.add(keyOf(e)) : st.selected.delete(keyOf(e)); }); renderTable(); } });
     const cols = [
