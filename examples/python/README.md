@@ -19,6 +19,7 @@ uv run upload_data.py --generate
 | key                    | default                 |
 |------------------------|-------------------------|
 | `OPENS3_ENDPOINT`      | `http://localhost:9000` |
+| `OPENS3_TLS_VERIFY`    | `true` (`false` for self-signed dev certs, or a PEM path) |
 | `OPENS3_ACCESS_KEY`    | `root`                  |
 | `OPENS3_SECRET_KEY`    | `password`              |
 | `OPENS3_REGION`        | `us-east-1`             |
@@ -37,7 +38,7 @@ uv run upload_data.py --generate
 ```sh
 uv run run_all.py            # full cycle
 uv run upload_data.py --generate --skip-large   # quick run without the 20 MiB blobs
-OPENS3_ENDPOINT=http://devbox4.lan:9000 uv run verify_data.py --no-save
+OPENS3_ENDPOINT=https://devbox4.lan:9000 OPENS3_TLS_VERIFY=false uv run verify_data.py --no-save
 ```
 
 `generated/` and `downloads/` are git-ignored scratch directories.

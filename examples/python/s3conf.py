@@ -46,6 +46,26 @@ REGION = os.environ.get("OPENS3_REGION", "us-east-1")
 BUCKET_PREFIX = os.environ.get("OPENS3_BUCKET_PREFIX", "pyclient-test")
 
 
+def _tls_verify(value: str):
+    """'true' -> verify with system CAs, 'false' -> no verification (self-signed
+    dev certs), anything else -> path to a CA bundle / server certificate."""
+    v = value.strip()
+    if v.lower() in ("", "1", "true", "yes"):
+        return True
+    if v.lower() in ("0", "false", "no"):
+        return False
+    v = os.path.expanduser(v)
+    return v if os.path.isabs(v) else str((HERE / v).resolve())
+
+
+TLS_VERIFY = _tls_verify(os.environ.get("OPENS3_TLS_VERIFY", "true"))
+
+if TLS_VERIFY is False:
+    import urllib3
+
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
 def session() -> boto3.session.Session:
     return boto3.session.Session(
         aws_access_key_id=ACCESS_KEY,
@@ -59,6 +79,7 @@ def client():
     return session().client(
         "s3",
         endpoint_url=ENDPOINT,
+        verify=TLS_VERIFY,
         config=Config(
             s3={"addressing_style": "path"},
             retries={"max_attempts": 3, "mode": "standard"},
@@ -71,6 +92,7 @@ def resource():
     return session().resource(
         "s3",
         endpoint_url=ENDPOINT,
+        verify=TLS_VERIFY,
         config=Config(s3={"addressing_style": "path"}),
     )
 
@@ -80,4 +102,7 @@ def bucket_name(suffix: str) -> str:
 
 
 def describe() -> str:
-    return f"endpoint={ENDPOINT} access_key={ACCESS_KEY} region={REGION} bucket_prefix={BUCKET_PREFIX}"
+    return (
+        f"endpoint={ENDPOINT} access_key={ACCESS_KEY} region={REGION} "
+        f"bucket_prefix={BUCKET_PREFIX} tls_verify={TLS_VERIFY}"
+    )

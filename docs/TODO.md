@@ -22,25 +22,41 @@ Move an item to "Done" with the commit that closed it.
       certificate first; DNS-01 providers later if needed.
    5. Mutual TLS (client certificates), later.
 
+2. **First tagged release (`v0.1.0`) and release tooling.** GOVERNANCE.md
+   section 4 promises reproducible builds, Sigstore signatures and an SBOM;
+   none of that exists yet. Needed: `make release` cross-compiling static
+   binaries (linux/darwin, amd64/arm64) with `-trimpath` and a pinned
+   toolchain, checksums, cosign signatures, SBOM (syft or `go version -m`
+   based), the Docker image tagged and pushed, and a CHANGELOG. Reports
+   (`API-COVERAGE`, `CONFORMANCE`, `AWSCLI`) should name the version.
+3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
+   without the server: walk the metadata, verify every referenced blob
+   exists with the right size (and checksum where stored), report orphan
+   blobs and dangling records, optionally repair, and export a bucket (or
+   everything) to plain files. Read-only mode must work on a live data
+   root's copy; repair needs the server stopped.
+4. **Browser-level console smoke test.** The login-form field-name bug
+   escaped every Go test because nothing exercises the page's JavaScript.
+   Add a headless-browser test (Docker tier, alongside `make awscli`) that
+   signs in, creates a bucket, uploads/downloads/deletes an object, creates
+   a user and key, and changes settings.
+5. **Audit log.** Structured JSON record per request (who, action, bucket,
+   key, source address, status, latency, request id) to a file and/or
+   webhook target; separate from access logging (PLAN phase 2).
+6. **Phase 2 features** (docs/PLAN.md): replication worker, bucket quotas,
+   website endpoint serving, access-log delivery, inventory reports, more
+   notification targets, the remaining s3-tests failures.
+7. **Erasure coding across local disks** (PLAN phase 4): the feature the
+   MinIO audience most expects; a new blob backend with Reed-Solomon
+   striping, bitrot detection, healing and disk-failure handling. Start
+   only on a released, tested base.
+
 ## Deferred
 
 - **MinIO admin API compatibility.** Serve MinIO's admin protocol under
   `/minio/admin/v3/` with MinIO's names and conventions so that `mc admin`
   and `madmin-go` scripts work unchanged against OpenS3. Part of the MinIO
   migration work, which is deferred; do not start without agreement.
-
-## Background for item 2
-
-- Wire compatibility is unaffected: S3 clients only ever present a key ID
-  and a secret; user names never go over the wire. MinIO's "user name and
-  password" are a key ID and secret under another name.
-- AWS: a user is an identity; it authenticates to the API with generated
-  access keys and to the console with a separate password (+MFA); the two
-  are never interchangeable. MinIO: the user name is the key ID and the
-  console accepts only the key pair.
-- Refusing key pairs at the console costs one administrative step per
-  console user (setting a password) and buys the AWS separation: a leaked
-  programmatic key cannot be used in a browser.
 
 ## Done
 

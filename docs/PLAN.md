@@ -132,8 +132,10 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
 
 ### Operations
 - [x] Single binary `opens3 server`, YAML/env/flag config, TLS
+- [x] AWS IAM Query API (`aws iam`, boto3) and STS GetCallerIdentity (`docs/IAM-API.md`)
 - [x] Admin REST API (`/opens3/admin/v1`) + `opens3 admin` CLI
-- [x] Prometheus metrics, health/readiness endpoints, structured logs, audit log
+- [x] Prometheus metrics, health/readiness endpoints, structured logs
+- [ ] Audit log (phase 2)
 - [x] Lifecycle worker, notification dispatcher (webhook; NATS/Kafka/AMQP/MQTT/Redis targets phase 2)
 - [ ] Bucket replication worker (async to remote S3) — phase 2
 - [ ] Bucket quotas — phase 2
@@ -147,7 +149,7 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Plan, scaffolding, CI gate, conformance harness | done |
-| 1 | Core object store: buckets, objects, versioning, multipart, SigV4, IAM/policies, listing, tagging, ACL, lifecycle/CORS/policy configs, SSE, object lock, checksums, notifications (webhook), admin API, metrics, console, conformance harness | done 12 Sep 2026: 598/637 s3-tests passing, aws-sdk-go-v2 suite green |
+| 1 | Core object store: buckets, objects, versioning, multipart, SigV4, IAM/policies, listing, tagging, ACL, lifecycle/CORS/policy configs, SSE, object lock, checksums, notifications (webhook), admin API, metrics, console, conformance harness | done 12–13 Sep 2026: 600/637 s3-tests, aws-sdk-go-v2 suite, AWS CLI suite 442/442, AWS IAM API, console |
 | 2 | Replication worker, bucket quotas, website endpoint serving, access-log delivery, audit log, inventory reports, more notification targets, remaining s3-tests failures, `opens3 fsck`/export tool | next |
 | 3 | SelectObjectContent, OIDC/LDAP, console UI | |
 | 4 | Distributed/erasure-coded backend, healing, tiering | |
