@@ -5,18 +5,13 @@ Move an item to "Done" with the commit that closed it.
 
 ## Open
 
-1. **Purge expired STS sessions.** `iam.Store.PurgeExpired` exists but nothing
-   calls it, so every console login and AssumeRole leaves a dead key record
-   in `meta/opens3.db` (`i/k/<accessKey>`). Expired keys are already
-   rejected on use, so this is housekeeping, not security. Plan: a server
-   goroutine that purges on startup and then hourly; console logout already
-   deletes its own session key.
-2. **Identity model: move to the AWS model (decided 13 Sep 2026).**
-   - API credentials are generated key pairs by default: a 20-character key
-     ID with an OpenS3-specific type prefix (`AKOS` long-lived, `ASOS`
-     temporary) and a 40-character secret, shown once. Any chosen key ID of
-     three or more characters stays accepted, so existing and migrated
-     MinIO-style credentials keep working; users may hold several keys.
+1. **Identity model: move to the AWS model (decided 13 Sep 2026).**
+   - API credentials are generated key pairs: a 20-character key ID and a
+     40-character secret, shown once, no prefix. The web UI must never let
+     a user type either value (requested 13 Sep 2026); the admin API and
+     CLI keep accepting a chosen key ID of three or more characters solely
+     for migrating MinIO-style credentials, and any existing key keeps
+     working. Users may hold several keys.
    - Console sign-in accepts a user name and console password only; key
      pairs are refused there with a message pointing at the API. The root
      account signs in with the root user name and root password from the
@@ -29,7 +24,7 @@ Move an item to "Done" with the commit that closed it.
      policies, optional console password, generated key pair (or a chosen
      one for MinIO-style migration).
    - Later, not now: MFA and password rules for console passwords.
-3. **One admin action vocabulary.** The admin API uses MinIO-style names
+2. **One admin action vocabulary.** The admin API uses MinIO-style names
    (`admin:AddUser`, `admin:RemoveUser`, ...); the console invented its own
    (`admin:CreateUser`, ...). A narrow operator policy must list both. Plan:
    a single table of actions shared by both, with the console realigned to
@@ -50,4 +45,5 @@ Move an item to "Done" with the commit that closed it.
 
 ## Done
 
-(none yet)
+- Purge expired temporary credentials: hourly sweep and on startup
+  (`OPENS3_PURGE_INTERVAL`), metric `opens3_iam_expired_credentials_purged_total`.
