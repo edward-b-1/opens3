@@ -238,3 +238,5 @@ html[data-density="compact"] .ficon, html[data-density="compact"] .ficon svg { w
 .banner code { font-size: 12px; }
 .app:has(.banner:not([hidden])) { grid-template-rows: 52px auto 1fr; }
 html[data-density="compact"] .app:has(.banner:not([hidden])) { grid-template-rows: 42px auto 1fr; }
+
+.field.disabled { opacity: .55; }

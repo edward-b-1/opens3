@@ -29,6 +29,25 @@ Move an item to "Done" with the commit that closed it.
    GetAccountSummary. Named policies get ARNs of the form
    `arn:aws:iam::<account>:policy/<name>`.
 
+2. **TLS.** The listener already serves HTTPS from `--tls-cert`/`--tls-key`
+   (TLS 1.2 minimum, Go default ciphers, Secure cookies). Remaining, in
+   order of value:
+   1. `--tls self-signed`: generate and persist a key pair under the data
+      root on first start, print the fingerprint, reuse afterwards.
+   2. Automatic public certificates (`--tls acme --tls-domains ...
+      --tls-email ...`) via Let's Encrypt HTTP-01 using
+      `golang.org/x/crypto/acme/autocert`, cached under the data root.
+      Decision pending: take the dependency, or leave public certificates
+      to a reverse proxy.
+   3. Reload certificate files when they change (no restart for external
+      renewal tooling).
+   4. Optional plain-HTTP listener that redirects to HTTPS, and
+      `Strict-Transport-Security` once TLS is on.
+   5. Wildcard certificates for virtual-host bucket addressing
+      (`*.s3.example.com`): document; support a provided wildcard
+      certificate first; DNS-01 providers later if needed.
+   6. Mutual TLS (client certificates), later.
+
 ## Deferred
 
 - **MinIO admin API compatibility.** Serve MinIO's admin protocol under

@@ -125,15 +125,18 @@ identityTabs.keys = async function (body) {
   async function create() {
     const users = admin ? await userNames() : [app.me.user];
     const user = h('select', { disabled: !admin }, users.map((u) => h('option', { value: u, selected: u === (initial || app.me.user) }, u)));
-    const kind = h('select', h('option', { value: 'service' }, 'Service account (optional session policy)'), h('option', { value: 'user' }, 'Regular user key'));
+    const kind = h('select', h('option', { value: 'user', selected: true }, 'Regular user key'), h('option', { value: 'service' }, 'Service account (restricted by a session policy)'));
     const desc = h('input.input');
-    const expires = h('input.input', { type: 'datetime-local' });
-    const pol = jsonField('Session policy (optional)', null);
+    const expires = h('input.input', { type: 'date' });
+    const pol = jsonField('Session policy', null);
+    const syncKind = () => { const svc = kind.value === 'service'; pol.textarea.disabled = !svc; pol.classList.toggle('disabled', !svc); if (!svc) pol.textarea.value = ''; };
+    kind.addEventListener('change', syncKind);
+    syncKind();
     const r = await modal({ title: 'Create access key', submit: 'Create', wide: true,
-      body: [field('User', user), field('Kind', kind), field('Description', desc), field('Expires', expires),
-        h('p.muted.small', 'The access key ID and secret are generated and shown once. A session policy restricts the key to a subset of the user\'s permissions; it can never grant more.'), pol],
-      onSubmit: () => api.post('keys', { user: user.value, kind: kind.value, description: desc.value, sessionPolicy: pol.value(),
-        expires: expires.value ? new Date(expires.value).toISOString() : undefined }) });
+      body: [field('User', user), field('Kind', kind), field('Description', desc), field('Expires', expires, 'Optional. The key stops working at the end of this day, UTC.'),
+        h('p.muted.small', 'The access key ID and secret are generated and shown once. A session policy restricts a service account to a subset of the user\'s permissions; it can never grant more.'), pol],
+      onSubmit: () => api.post('keys', { user: user.value, kind: kind.value, description: desc.value, sessionPolicy: kind.value === 'service' ? pol.value() : undefined,
+        expires: expires.value ? new Date(expires.value + 'T23:59:59Z').toISOString() : undefined }) });
     if (r) { await showSecret(r); reload(); }
   }
   async function edit(k) {
