@@ -11,29 +11,42 @@ Move an item to "Done" with the commit that closed it.
    rejected on use, so this is housekeeping, not security. Plan: a server
    goroutine that purges on startup and then hourly; console logout already
    deletes its own session key.
-2. **Identity model: user names versus access key pairs.** The console's
-   "create user" dialog follows the MinIO convention (user name = first
-   access key, secret typed in). The store already has the AWS shape (user
-   record + generated key records). Decide the default presentation and
-   whether to add a separate console password. Discussion in progress; see
-   the notes below before changing code.
+2. **Identity model: move to the AWS model (decided 13 Sep 2026).**
+   - API credentials are generated key pairs by default: a 20-character key
+     ID with an OpenS3-specific type prefix (`AKOS` long-lived, `ASOS`
+     temporary) and a 40-character secret, shown once. Any chosen key ID of
+     three or more characters stays accepted, so existing and migrated
+     MinIO-style credentials keep working; users may hold several keys.
+   - Console sign-in accepts a user name and console password only; key
+     pairs are refused there with a message pointing at the API. The root
+     account signs in with the root user name and root password from the
+     environment.
+   - A console password is optional per user: set in the create-user
+     dialog or by an administrator later; users can change their own.
+     Stored as PBKDF2-SHA256 with a per-user salt (standard library); never
+     usable against the S3 API.
+   - The create-user dialog and `opens3 admin user add` follow this: name,
+     policies, optional console password, generated key pair (or a chosen
+     one for MinIO-style migration).
+   - Later, not now: MFA and password rules for console passwords.
 3. **One admin action vocabulary.** The admin API uses MinIO-style names
    (`admin:AddUser`, `admin:RemoveUser`, ...); the console invented its own
    (`admin:CreateUser`, ...). A narrow operator policy must list both. Plan:
    a single table of actions shared by both, with the console realigned to
    the documented API names.
 
-## Notes on item 2
+## Background for item 2
 
-- Wire compatibility is unaffected by the choice: S3 clients only ever
-  present an access key ID and a secret; user names never go over the wire.
-- AWS: a user is an identity; it authenticates with up to two generated
-  access keys (20-character ID beginning `AKIA`, 40-character secret) and,
-  for the console, a separate password. MinIO: the user name is the access
-  key, the "password" is its secret, service accounts are generated pairs.
-- OpenS3 accepts any access key string of 3+ characters, so MinIO-style
-  users (name == key) and AWS-style users (name + generated keys) can
-  coexist; moving the default to generated pairs is backwards compatible.
+- Wire compatibility is unaffected: S3 clients only ever present a key ID
+  and a secret; user names never go over the wire. MinIO's "user name and
+  password" are a key ID and secret under another name.
+- AWS: a user is an identity; it authenticates to the API with generated
+  access keys and to the console with a separate password (+MFA); the two
+  are never interchangeable. MinIO: the user name is the key ID and the
+  console accepts only the key pair.
+- Refusing key pairs at the console costs one administrative step per
+  console user (setting a password) and buys the AWS separation: a leaked
+  programmatic key cannot be used in a browser.
 
 ## Done
 
