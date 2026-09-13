@@ -13,8 +13,10 @@
 package console
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -24,6 +26,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"gitlab.com/Birdsall/opens3/internal/iam"
@@ -64,6 +67,8 @@ type Handler struct {
 	mux     *http.ServeMux
 	static  fs.FS
 	started time.Time
+	etagMu  sync.Mutex
+	etags   map[string]string
 }
 
 // New builds the console handler.
@@ -236,17 +241,43 @@ func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name == "index.html" {
-		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'")
-	} else {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
 	}
+	// Every asset revalidates on each load (a conditional request answered
+	// with 304 when unchanged) so an upgraded binary is picked up on the
+	// next page load without a hard reload.
+	w.Header().Set("Cache-Control", "no-cache")
 	rs, ok := f.(io.ReadSeeker)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
+	if tag := h.etag(name, rs); tag != "" {
+		w.Header().Set("ETag", tag)
+	}
 	http.ServeContent(w, r, name, h.started, rs)
+}
+
+// etag returns a content hash for an embedded asset, computed once.
+func (h *Handler) etag(name string, rs io.ReadSeeker) string {
+	h.etagMu.Lock()
+	defer h.etagMu.Unlock()
+	if h.etags == nil {
+		h.etags = map[string]string{}
+	}
+	if t, ok := h.etags[name]; ok {
+		return t
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(sum, rs); err != nil {
+		return ""
+	}
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return ""
+	}
+	t := `"` + hex.EncodeToString(sum.Sum(nil)[:16]) + `"`
+	h.etags[name] = t
+	return t
 }
 
 // --- sessions --------------------------------------------------------------
