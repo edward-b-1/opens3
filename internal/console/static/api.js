@@ -74,7 +74,7 @@
     put: (p, b) => call('PUT', p, b),
     patch: (p, b) => call('PATCH', p, b),
     del: (p) => call('DELETE', p),
-    login: (accessKey, secretKey) => call('POST', 'login', { accessKey, secretKey }, { quiet401: true }),
+    login: (user, password) => call('POST', 'login', { user, password }, { quiet401: true }),
     me: () => call('GET', 'me', undefined, { quiet401: true }),
     upload,
     qs,
