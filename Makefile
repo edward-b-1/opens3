@@ -34,3 +34,10 @@ clean:
 .PHONY: conformance
 conformance:
 	tests/s3tests/run.sh $(S3TESTS_ARGS)
+
+# AWS CLI end-to-end suite (needs Docker: runs the pinned amazon/aws-cli
+# image against a local server) and regenerates docs/AWSCLI.md.
+# OPENS3_AWSCLI=native uses an `aws` on PATH / ~/.local/bin instead.
+.PHONY: awscli
+awscli:
+	tests/awscli/run.sh

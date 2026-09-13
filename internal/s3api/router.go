@@ -50,7 +50,57 @@ func objectOp(name, action string, h func(*Server, *reqCtx) error) *operation {
 	return &operation{name: name, action: action, handler: h, level: 2}
 }
 
+// unsupportedSubresources are query subresources of newer S3 features
+// (directory buckets, S3 Metadata, ABAC, annotations, rename, in-place
+// re-encryption) that OpenS3 does not implement. They must be recognised so
+// that e.g. "DELETE /bucket?metadataConfiguration" is answered with
+// NotImplemented instead of falling through to DeleteBucket, and
+// "PUT /bucket/key?renameObject" does not become a PutObject.
+var unsupportedSubresources = map[string]string{
+	// bucket level
+	"session":                 "CreateSession",
+	"abac":                    "BucketAbac",
+	"metadataConfiguration":   "BucketMetadataConfiguration",
+	"metadataTable":           "BucketMetadataTableConfiguration",
+	"metadataInventoryTable":  "UpdateBucketMetadataInventoryTableConfiguration",
+	"metadataJournalTable":    "UpdateBucketMetadataJournalTableConfiguration",
+	"metadataAnnotationTable": "UpdateBucketMetadataAnnotationTableConfiguration",
+	// object level
+	"renameObject": "RenameObject",
+	"annotation":   "ObjectAnnotation",
+	"encryption":   "UpdateObjectEncryption", // "?encryption" on a bucket is routed above
+}
+
+// unsupportedOp answers an authenticated request for a recognised but
+// unimplemented subresource with NotImplemented.
+func unsupportedOp(name string, level int) *operation {
+	return &operation{name: name, level: level, handler: func(*Server, *reqCtx) error {
+		return errNotImplemented(name + " is not supported")
+	}}
+}
+
+func routeUnsupported(q url.Values, level int, skip ...string) *operation {
+	for sub, name := range unsupportedSubresources {
+		if !has(q, sub) {
+			continue
+		}
+		skipped := false
+		for _, sk := range skip {
+			if sk == sub {
+				skipped = true
+			}
+		}
+		if !skipped {
+			return unsupportedOp(name, level)
+		}
+	}
+	return nil
+}
+
 func routeBucket(c *reqCtx, m string, q url.Values) *operation {
+	if op := routeUnsupported(q, 1, "encryption"); op != nil {
+		return op
+	}
 	type sub struct {
 		q      string
 		get    *operation
@@ -125,6 +175,9 @@ func routeBucket(c *reqCtx, m string, q url.Values) *operation {
 }
 
 func routeObject(c *reqCtx, m string, q url.Values) *operation {
+	if op := routeUnsupported(q, 2); op != nil {
+		return op
+	}
 	uploadID := has(q, "uploadId")
 	switch m {
 	case http.MethodGet:
