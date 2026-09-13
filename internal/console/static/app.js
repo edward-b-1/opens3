@@ -41,8 +41,16 @@
     location.hash = '#/buckets';
   }
 
+  // Warn when secrets would travel in clear text: plain http from anything
+  // but the local machine.
+  function checkTransport() {
+    const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+    document.getElementById('http-banner').hidden = !(location.protocol === 'http:' && !local);
+  }
+
   function showApp(me) {
     app.me = me;
+    checkTransport();
     document.getElementById('login-root').hidden = true;
     document.getElementById('app').hidden = false;
     document.getElementById('topbar-user').textContent = me.user + (me.isRoot ? ' (root)' : '');

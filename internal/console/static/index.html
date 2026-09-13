@@ -20,6 +20,7 @@
     <button class="btn btn-ghost icon-btn" id="settings-btn" aria-label="Settings" title="Settings (,)">&#9881;</button>
     <button class="btn btn-ghost" id="logout-btn">Log out</button>
   </header>
+  <div class="banner warn" id="http-banner" role="alert" hidden>This console is being used over plain HTTP from a remote address. Passwords, secret keys and session cookies are sent unencrypted. Run the server with TLS (<code>--tls-cert</code> / <code>--tls-key</code>) or behind a TLS proxy.</div>
   <nav class="sidebar" id="nav" aria-label="Sections">
     <a href="#/buckets" data-nav="buckets">Buckets</a>
     <a href="#/identity/users" data-nav="identity" data-admin>Identity</a>
