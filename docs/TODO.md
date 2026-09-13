@@ -24,11 +24,36 @@ Move an item to "Done" with the commit that closed it.
      policies, optional console password, generated key pair (or a chosen
      one for MinIO-style migration).
    - Later, not now: MFA and password rules for console passwords.
-2. **One admin action vocabulary.** The admin API uses MinIO-style names
-   (`admin:AddUser`, `admin:RemoveUser`, ...); the console invented its own
-   (`admin:CreateUser`, ...). A narrow operator policy must list both. Plan:
-   a single table of actions shared by both, with the console realigned to
-   the documented API names.
+2. **Administrative API: adopt the AWS interface and vocabulary (decided
+   13 Sep 2026).** Implement the AWS IAM Query API (the protocol behind
+   `aws iam ...` and boto3's `iam` client: SigV4-signed POST with
+   `Action=CreateUser&Version=2010-05-08`, XML responses) as the canonical
+   administrative interface, so the AWS CLI and SDKs manage users, access
+   keys, groups, policies and console passwords ("login profiles") against
+   OpenS3 unchanged. Action names in policies become AWS's (`iam:*`,
+   `kms:*`, `sts:*`); the MinIO `admin:*` names are removed and a policy
+   naming one is rejected with the AWS equivalent in the error. The
+   `opens3 admin` CLI and the console move onto the same vocabulary. The
+   current `/opens3/admin/v1` JSON API stays only for what AWS has no
+   equivalent for (server info, forced bucket deletion, KMS key management
+   until a KMS-protocol subset exists).
+   Initial operation set: CreateUser, GetUser, ListUsers, DeleteUser,
+   CreateAccessKey, ListAccessKeys, UpdateAccessKey, DeleteAccessKey,
+   CreateGroup, GetGroup, ListGroups, DeleteGroup, AddUserToGroup,
+   RemoveUserFromGroup, ListGroupsForUser, CreatePolicy, GetPolicy,
+   GetPolicyVersion, ListPolicies, DeletePolicy, AttachUserPolicy,
+   DetachUserPolicy, ListAttachedUserPolicies, AttachGroupPolicy,
+   DetachGroupPolicy, ListAttachedGroupPolicies, CreateLoginProfile,
+   UpdateLoginProfile, DeleteLoginProfile, GetLoginProfile,
+   GetAccountSummary. Named policies get ARNs of the form
+   `arn:aws:iam::<account>:policy/<name>`.
+
+## Deferred
+
+- **MinIO admin API compatibility.** Serve MinIO's admin protocol under
+  `/minio/admin/v3/` with MinIO's names and conventions so that `mc admin`
+  and `madmin-go` scripts work unchanged against OpenS3. Part of the MinIO
+  migration work, which is deferred; do not start without agreement.
 
 ## Background for item 2
 
