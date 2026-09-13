@@ -51,6 +51,15 @@ Move an item to "Done" with the commit that closed it.
    striping, bitrot detection, healing and disk-failure handling. Start
    only on a released, tested base.
 
+8. **Bucket default encryption in the console.** Both the AWS and MinIO
+   consoles let an administrator set a bucket's default encryption
+   (SSE-S3, or SSE-KMS with a named key); ours only displays it. Add the
+   setting to the bucket settings page (calls the existing
+   PutBucketEncryption path). Decision (13 Sep 2026): objects are NOT
+   encrypted by default; encryption is explicit per request or per bucket.
+9. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
+   `aws:kms`; either implement the second AES layer or reject the value.
+
 ## Deferred
 
 - **MinIO admin API compatibility.** Serve MinIO's admin protocol under
