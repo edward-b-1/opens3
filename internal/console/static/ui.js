@@ -96,11 +96,16 @@
     if (isNaN(d)) return s;
     const utc = pref('timeZone', 'local') === 'utc';
     const absolute = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: utc ? 'UTC' : undefined }) + (utc ? ' UTC' : '');
-    if (pref('dateStyle', 'absolute') === 'relative') {
-      const el = h('span', { title: absolute }, fmtRelative(d));
-      return el;
-    }
-    return absolute;
+    return pref('dateStyle', 'absolute') === 'relative' ? fmtRelative(d) : absolute;
+  }
+  // dateCell(s): like fmtDate, but in relative mode the absolute time is a tooltip.
+  function dateCell(s) {
+    if (!s || pref('dateStyle', 'absolute') !== 'relative') return fmtDate(s);
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const utc = pref('timeZone', 'local') === 'utc';
+    const absolute = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: utc ? 'UTC' : undefined }) + (utc ? ' UTC' : '');
+    return h('span', { title: absolute }, fmtRelative(d));
   }
   function fmtDuration(sec) {
     sec = Math.floor(sec); const d = Math.floor(sec / 86400), hh = Math.floor(sec % 86400 / 3600), mm = Math.floor(sec % 3600 / 60);
@@ -169,5 +174,5 @@
   const badge = (text, kind) => h('span.badge' + (kind ? '.' + kind : ''), text);
   const copy = (text) => navigator.clipboard ? navigator.clipboard.writeText(text).then(() => toast('Copied', 'success', 1500)) : toast('Clipboard unavailable', 'error');
 
-  window.ui = { h, clear, toast, error, modal, confirm, fmtBytes, fmtDate, fmtDuration, pretty, table, jsonField, tagsField, multiSelect, field, badge, copy };
+  window.ui = { h, clear, toast, error, modal, confirm, fmtBytes, fmtDate, dateCell, fmtDuration, pretty, table, jsonField, tagsField, multiSelect, field, badge, copy };
 })();

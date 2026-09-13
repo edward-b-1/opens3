@@ -62,7 +62,7 @@ views.objects = async function (main, bucket, prefix) {
         ? h('a.name-cell', { href: '#' + app.objectsHash(bucket, e.prefix) }, ui.fileIcon(e.prefix, 'folder'), name(e))
         : h('a.cell-link.name-cell', { href: '#', onClick: (ev) => { ev.preventDefault(); showDetail(e); }, class: e.deleteMarker ? 'muted' : '' }, ui.fileIcon(e.key), name(e), e.deleteMarker ? [' ', badge('delete marker', 'warn')] : null, st.versions && e.isLatest ? [' ', badge('latest', 'ok')] : null) },
       { h: 'Size', cls: 'num', cell: (e) => e.prefix || e.deleteMarker ? '' : fmtBytes(e.size) },
-      { h: 'Modified', cell: (e) => e.prefix ? '' : fmtDate(e.lastModified) },
+      { h: 'Modified', cell: (e) => e.prefix ? '' : ui.dateCell(e.lastModified) },
     ];
     if (st.versions) cols.push({ h: 'Version', cell: (e) => e.versionId ? h('code', e.versionId.length > 16 ? e.versionId.slice(0, 16) + '…' : e.versionId) : '' });
     cols.push({ h: '', cls: 'actions-cell', cell: (e) => e.deleteMarker ? null : e.prefix ? [
@@ -93,7 +93,7 @@ views.objects = async function (main, bucket, prefix) {
           h('a.btn.btn-sm', { href: api.downloadURL(bucket, o.key, o.versionId, true), target: '_blank', rel: 'noopener' }, 'Open'),
           h('button.btn.btn-sm', { onClick: () => copy(o.key) }, 'Copy key'),
           h('button.btn.btn-sm.btn-danger', { onClick: () => remove([{ key: o.key, versionId: st.versions ? o.versionId : '' }]) }, 'Delete')),
-        kv([['Key', h('code', o.key)], ['Size', fmtBytes(o.size) + ' (' + o.size + ' bytes)'], ['Modified', fmtDate(o.lastModified)],
+        kv([['Key', h('code', o.key)], ['Size', fmtBytes(o.size) + ' (' + o.size + ' bytes)'], ['Modified', ui.dateCell(o.lastModified)],
           ['ETag', h('code', o.etag)], ['Version', o.versionId ? h('code', o.versionId) : ''], ['Content type', o.contentType],
           ['Content encoding', o.contentEncoding], ['Cache control', o.cacheControl], ['Storage class', o.storageClass || 'STANDARD'],
           ['Parts', o.parts > 1 ? o.parts : ''], ['Owner', o.owner],
