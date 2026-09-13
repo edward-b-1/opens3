@@ -43,6 +43,21 @@ func (s *Server) authenticate(c *reqCtx) error {
 	if err != nil {
 		return mapSigErr(err)
 	}
+	if p.ContentSHA256 == "" {
+		// No x-amz-content-sha256: fine for the Query APIs (IAM/STS clients
+		// sign the body hash), an error for S3 as on AWS.
+		if c.op.name != "AWSQuery" {
+			return mapSigErr(sigv4.ErrMissingContentHash)
+		}
+		b, err := io.ReadAll(io.LimitReader(r.Body, 4<<20+1))
+		if err != nil || len(b) > 4<<20 {
+			return s3err.New(s3err.MaxMessageLengthExceeded)
+		}
+		sum := sha256.Sum256(b)
+		p.ContentSHA256 = hex.EncodeToString(sum[:])
+		c.body = &bodyReader{r: strings.NewReader(string(b)), size: int64(len(b))}
+		r.Body = io.NopCloser(strings.NewReader(string(b)))
+	}
 	opt := sigv4.Options{}
 	if s.cfg.EnforceRegion {
 		opt.Region = s.cfg.Region
@@ -190,6 +205,7 @@ func (s *Server) authorize(c *reqCtx) error {
 		req.BucketACL = c.bkt.ACL
 		req.PublicAccessBlock = c.bkt.PublicAccessBlock
 		req.Ownership = c.bkt.Ownership
+		req.SelfLockConfirmed = c.bkt.SelfLock
 	}
 	if c.objMeta != nil {
 		req.ObjectOwner = c.objMeta.Owner

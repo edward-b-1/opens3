@@ -208,7 +208,7 @@ func TestAuthorize(t *testing.T) {
 	// admin actions.
 	s.CreateUser("adm", "admsecret1", []string{"consoleAdmin"})
 	adm, _ := s.Resolve("adm", "")
-	a := Request{Action: "admin:ListUsers"}
+	a := Request{Action: "iam:ListUsers"}
 	check("admin allowed", a, adm, true)
 	check("admin denied for rw", a, rw, false)
 	check("admin root", a, root, true)

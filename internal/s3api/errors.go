@@ -47,6 +47,11 @@ func (s *Server) writeError(c *reqCtx, err error) {
 		s.log.Error("internal error", "op", opName(c), "req", c.id, "err", err)
 		e = errInternal()
 	}
+	if c.op != nil && c.op.name == "AWSQuery" {
+		// Query-protocol clients (IAM/STS SDKs) expect the ErrorResponse shape.
+		_ = s.stsError(c, string(e.Code), e.Message)
+		return
+	}
 	h := c.w.Header()
 	for k, v := range e.Headers {
 		h.Set(k, v)

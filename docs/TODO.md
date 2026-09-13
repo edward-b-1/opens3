@@ -5,31 +5,7 @@ Move an item to "Done" with the commit that closed it.
 
 ## Open
 
-1. **Administrative API: adopt the AWS interface and vocabulary (decided
-   13 Sep 2026).** Implement the AWS IAM Query API (the protocol behind
-   `aws iam ...` and boto3's `iam` client: SigV4-signed POST with
-   `Action=CreateUser&Version=2010-05-08`, XML responses) as the canonical
-   administrative interface, so the AWS CLI and SDKs manage users, access
-   keys, groups, policies and console passwords ("login profiles") against
-   OpenS3 unchanged. Action names in policies become AWS's (`iam:*`,
-   `kms:*`, `sts:*`); the MinIO `admin:*` names are removed and a policy
-   naming one is rejected with the AWS equivalent in the error. The
-   `opens3 admin` CLI and the console move onto the same vocabulary. The
-   current `/opens3/admin/v1` JSON API stays only for what AWS has no
-   equivalent for (server info, forced bucket deletion, KMS key management
-   until a KMS-protocol subset exists).
-   Initial operation set: CreateUser, GetUser, ListUsers, DeleteUser,
-   CreateAccessKey, ListAccessKeys, UpdateAccessKey, DeleteAccessKey,
-   CreateGroup, GetGroup, ListGroups, DeleteGroup, AddUserToGroup,
-   RemoveUserFromGroup, ListGroupsForUser, CreatePolicy, GetPolicy,
-   GetPolicyVersion, ListPolicies, DeletePolicy, AttachUserPolicy,
-   DetachUserPolicy, ListAttachedUserPolicies, AttachGroupPolicy,
-   DetachGroupPolicy, ListAttachedGroupPolicies, CreateLoginProfile,
-   UpdateLoginProfile, DeleteLoginProfile, GetLoginProfile,
-   GetAccountSummary. Named policies get ARNs of the form
-   `arn:aws:iam::<account>:policy/<name>`.
-
-2. **TLS.** The listener already serves HTTPS from `--tls-cert`/`--tls-key`
+1. **TLS.** The listener already serves HTTPS from `--tls-cert`/`--tls-key`
    (TLS 1.2 minimum, Go default ciphers, Secure cookies). Remaining, in
    order of value:
    1. `--tls self-signed`: generate and persist a key pair under the data
@@ -67,6 +43,12 @@ Move an item to "Done" with the commit that closed it.
   programmatic key cannot be used in a browser.
 
 ## Done
+
+- AWS IAM Query API on the S3 endpoint (`docs/IAM-API.md`): users, access
+  keys, groups, policies, attachments, login profiles, account summary,
+  STS GetCallerIdentity; AWS action vocabulary (`iam:*`, `kms:*`, `sts:*`,
+  `opens3:*`) across the admin API and console, MinIO `admin:*` names
+  rejected with the AWS equivalent.
 
 - TLS item 4: plain-HTTP connections on the TLS port are redirected to
   https (first-byte sniff, 301 for GET/HEAD, 308 otherwise) and

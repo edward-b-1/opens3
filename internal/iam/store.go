@@ -72,7 +72,8 @@ type Store struct {
 	cfg Config
 	mu  sync.RWMutex
 	// cache of parsed policy documents by name
-	pcache map[string]*policy.Document
+	pcache  map[string]*policy.Document
+	started time.Time
 }
 
 // Open creates the store and ensures the built-in policies exist.
@@ -89,14 +90,20 @@ func Open(db kv.Store, cfg Config) (*Store, error) {
 	if cfg.AccountID == "" {
 		cfg.AccountID = "000000000000"
 	}
-	s := &Store{kv: db, cfg: cfg, pcache: map[string]*policy.Document{}}
+	s := &Store{kv: db, cfg: cfg, pcache: map[string]*policy.Document{}, started: time.Now().UTC()}
 	err := db.Update(func(tx kv.Txn) error {
 		for name, doc := range builtinPolicies {
 			k := []byte(nsPolicy + name)
-			if _, err := tx.Get(k); err == nil {
-				continue
+			// Built-in documents are owned by the server: rewrite them on every
+			// start so upgrades take effect (they cannot be edited by users).
+			created := time.Now().UTC()
+			if b, err := tx.Get(k); err == nil {
+				var old Policy
+				if json.Unmarshal(b, &old) == nil && !old.Created.IsZero() {
+					created = old.Created
+				}
 			}
-			p := &Policy{Name: name, Document: json.RawMessage(doc), Created: time.Now().UTC(), Updated: time.Now().UTC(), BuiltIn: true}
+			p := &Policy{Name: name, Document: json.RawMessage(doc), Created: created, Updated: time.Now().UTC(), BuiltIn: true}
 			if err := tx.Put(k, mustJSON(p)); err != nil {
 				return err
 			}
@@ -861,8 +868,12 @@ func (s *Store) PutPolicy(name string, doc json.RawMessage) error {
 	if !validName(name) {
 		return fmt.Errorf("%w: invalid policy name", ErrInvalid)
 	}
-	if _, err := policy.Parse(doc); err != nil {
+	d, err := policy.Parse(doc)
+	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	if err := checkActions(d); err != nil {
+		return err
 	}
 	if _, ok := builtinPolicies[name]; ok {
 		return ErrBuiltin
@@ -966,4 +977,38 @@ func randomToken(n int, alphabet string) string {
 		out[i] = alphabet[int(b[i])%len(alphabet)]
 	}
 	return string(out)
+}
+
+// checkActions rejects removed action namespaces in a policy document.
+func checkActions(d *policy.Document) error {
+	for _, st := range d.Statements {
+		for _, a := range append(append([]string{}, st.Actions...), st.NotActions...) {
+			if err := LegacyActionError(a); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Error classification helpers for API layers.
+func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
+func IsExists(err error) bool   { return errors.Is(err, ErrExists) }
+func IsInvalid(err error) bool  { return errors.Is(err, ErrInvalid) }
+func IsBuiltin(err error) bool  { return errors.Is(err, ErrBuiltin) }
+func IsRoot(err error) bool     { return errors.Is(err, ErrRoot) }
+
+// Started returns when the store was opened (used as root's creation time).
+func (s *Store) Started() time.Time { return s.started }
+
+// SetPolicyPath records the IAM path of a named policy.
+func (s *Store) SetPolicyPath(name, path string) error {
+	return s.kv.Update(func(tx kv.Txn) error {
+		p, err := getPolicy(tx, name)
+		if err != nil {
+			return err
+		}
+		p.Path = path
+		return tx.Put([]byte(nsPolicy+name), mustJSON(p))
+	})
 }

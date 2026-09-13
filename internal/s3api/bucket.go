@@ -441,7 +441,11 @@ func (s *Server) putBucketPolicy(c *reqCtx) error {
 		return s3err.New(s3err.AccessDenied).WithMessage("Bucket policy contains public statements and BlockPublicPolicy is enabled")
 	}
 	var compact json.RawMessage = raw
-	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error { b.Policy = compact; b.PolicyText = string(raw); return nil }); err != nil {
+	if _, err := s.obj.UpdateBucket(c.r.Context(), c.bucket, func(b *meta.Bucket) error {
+		b.Policy, b.PolicyText = compact, string(raw)
+		b.SelfLock = strings.EqualFold(c.r.Header.Get("x-amz-confirm-remove-self-bucket-access"), "true")
+		return nil
+	}); err != nil {
 		return err
 	}
 	c.w.WriteHeader(http.StatusNoContent)

@@ -82,7 +82,7 @@ func (c *req) decode(v any) error {
 
 type handlerFunc func(c *req) (any, error)
 
-// routes registers every endpoint. The operation name is the admin:<Op>
+// routes registers every endpoint. The operation name is the AWS-style
 // IAM action required to call it.
 func (h *Handler) routes() {
 	p := Prefix
@@ -90,44 +90,44 @@ func (h *Handler) routes() {
 		method, path, _ := strings.Cut(pattern, " ")
 		h.mux.HandleFunc(method+" "+p+path, h.op(op, fn))
 	}
-	reg("GET /info", "ServerInfo", h.info)
-	reg("GET /health", "Health", h.health)
+	reg("GET /info", "opens3:ServerInfo", h.info)
+	reg("GET /health", "opens3:Health", h.health)
 
-	reg("GET /users", "ListUsers", h.listUsers)
-	reg("GET /users/{name}", "GetUser", h.getUser)
-	reg("PUT /users/{name}", "AddUser", h.putUser)
-	reg("DELETE /users/{name}", "RemoveUser", h.deleteUser)
-	reg("POST /users/{name}/enable", "EnableUser", h.setUserStatus(true))
-	reg("POST /users/{name}/disable", "DisableUser", h.setUserStatus(false))
-	reg("PUT /users/{name}/policies", "SetUserPolicies", h.setUserPolicies)
-	reg("PUT /users/{name}/password", "SetUserPassword", h.setUserPassword)
-	reg("DELETE /users/{name}/password", "SetUserPassword", h.clearUserPassword)
+	reg("GET /users", "iam:ListUsers", h.listUsers)
+	reg("GET /users/{name}", "iam:GetUser", h.getUser)
+	reg("PUT /users/{name}", "iam:CreateUser", h.putUser)
+	reg("DELETE /users/{name}", "iam:DeleteUser", h.deleteUser)
+	reg("POST /users/{name}/enable", "iam:UpdateUser", h.setUserStatus(true))
+	reg("POST /users/{name}/disable", "iam:UpdateUser", h.setUserStatus(false))
+	reg("PUT /users/{name}/policies", "iam:AttachUserPolicy", h.setUserPolicies)
+	reg("PUT /users/{name}/password", "iam:UpdateLoginProfile", h.setUserPassword)
+	reg("DELETE /users/{name}/password", "iam:UpdateLoginProfile", h.clearUserPassword)
 
-	reg("GET /keys", "ListKeys", h.listKeys)
-	reg("POST /keys", "AddKey", h.createKey)
-	reg("GET /keys/{ak}", "GetKey", h.getKey)
-	reg("DELETE /keys/{ak}", "RemoveKey", h.deleteKey)
-	reg("POST /keys/{ak}/enable", "EnableKey", h.setKeyStatus(true))
-	reg("POST /keys/{ak}/disable", "DisableKey", h.setKeyStatus(false))
-	reg("POST /keys/{ak}/rotate", "RotateKey", h.rotateKey)
+	reg("GET /keys", "iam:ListAccessKeys", h.listKeys)
+	reg("POST /keys", "iam:CreateAccessKey", h.createKey)
+	reg("GET /keys/{ak}", "iam:ListAccessKeys", h.getKey)
+	reg("DELETE /keys/{ak}", "iam:DeleteAccessKey", h.deleteKey)
+	reg("POST /keys/{ak}/enable", "iam:UpdateAccessKey", h.setKeyStatus(true))
+	reg("POST /keys/{ak}/disable", "iam:UpdateAccessKey", h.setKeyStatus(false))
+	reg("POST /keys/{ak}/rotate", "iam:UpdateAccessKey", h.rotateKey)
 
-	reg("GET /groups", "ListGroups", h.listGroups)
-	reg("GET /groups/{name}", "GetGroup", h.getGroup)
-	reg("PUT /groups/{name}", "AddGroup", h.putGroup)
-	reg("DELETE /groups/{name}", "RemoveGroup", h.deleteGroup)
-	reg("POST /groups/{name}/members", "UpdateGroupMembers", h.groupMembers)
+	reg("GET /groups", "iam:ListGroups", h.listGroups)
+	reg("GET /groups/{name}", "iam:GetGroup", h.getGroup)
+	reg("PUT /groups/{name}", "iam:CreateGroup", h.putGroup)
+	reg("DELETE /groups/{name}", "iam:DeleteGroup", h.deleteGroup)
+	reg("POST /groups/{name}/members", "iam:AddUserToGroup", h.groupMembers)
 
-	reg("GET /policies", "ListPolicies", h.listPolicies)
-	reg("GET /policies/{name}", "GetPolicy", h.getPolicy)
-	reg("PUT /policies/{name}", "AddPolicy", h.putPolicy)
-	reg("DELETE /policies/{name}", "RemovePolicy", h.deletePolicy)
+	reg("GET /policies", "iam:ListPolicies", h.listPolicies)
+	reg("GET /policies/{name}", "iam:GetPolicy", h.getPolicy)
+	reg("PUT /policies/{name}", "iam:CreatePolicy", h.putPolicy)
+	reg("DELETE /policies/{name}", "iam:DeletePolicy", h.deletePolicy)
 
-	reg("GET /buckets", "ListBuckets", h.listBuckets)
-	reg("DELETE /buckets/{name}", "RemoveBucket", h.deleteBucket)
+	reg("GET /buckets", "s3:ListAllMyBuckets", h.listBuckets)
+	reg("DELETE /buckets/{name}", "s3:DeleteBucket", h.deleteBucket)
 
-	reg("GET /kms/keys", "ListKMSKeys", h.listKMSKeys)
-	reg("POST /kms/keys", "CreateKMSKey", h.createKMSKey)
-	reg("DELETE /kms/keys/{id}", "DeleteKMSKey", h.deleteKMSKey)
+	reg("GET /kms/keys", "kms:ListKeys", h.listKMSKeys)
+	reg("POST /kms/keys", "kms:CreateKey", h.createKMSKey)
+	reg("DELETE /kms/keys/{id}", "kms:ScheduleKeyDeletion", h.deleteKMSKey)
 
 	// Unknown paths still require authentication so the API cannot be
 	// probed anonymously.
@@ -149,9 +149,9 @@ func (h *Handler) op(name string, fn handlerFunc) http.HandlerFunc {
 			writeErr(w, err)
 			return
 		}
-		if !h.opt.IAM.Authorize(iam.Request{Identity: c.id, Action: "admin:" + name}) {
+		if !h.opt.IAM.Authorize(iam.Request{Identity: c.id, Action: name}) {
 			h.opt.Log.Warn("admin: denied", "op", name, "user", c.id.Name())
-			writeErr(w, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: "not authorised for admin:" + name})
+			writeErr(w, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: "not authorised for " + name})
 			return
 		}
 		out, err := fn(c)

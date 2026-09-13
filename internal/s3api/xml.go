@@ -610,6 +610,19 @@ type xmlAssumeRoleResponse struct {
 	} `xml:"ResponseMetadata"`
 }
 
+type xmlGetCallerIdentityResponse struct {
+	XMLName xml.Name `xml:"GetCallerIdentityResponse"`
+	Xmlns   string   `xml:"xmlns,attr"`
+	Result  struct {
+		Arn     string `xml:"Arn"`
+		UserId  string `xml:"UserId"`
+		Account string `xml:"Account"`
+	} `xml:"GetCallerIdentityResult"`
+	ResponseMetadata struct {
+		RequestId string `xml:"RequestId"`
+	} `xml:"ResponseMetadata"`
+}
+
 type xmlSTSError struct {
 	XMLName xml.Name `xml:"ErrorResponse"`
 	Xmlns   string   `xml:"xmlns,attr"`

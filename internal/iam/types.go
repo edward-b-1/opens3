@@ -21,6 +21,7 @@ const (
 // User is an identity that can own access keys and belong to groups.
 type User struct {
 	Name     string    `json:"n"`
+	Path     string    `json:"path,omitempty"` // IAM path ("/" when empty)
 	Enabled  bool      `json:"e"`
 	Policies []string  `json:"p,omitempty"` // attached named policies
 	Groups   []string  `json:"g,omitempty"`
@@ -52,6 +53,7 @@ type Key struct {
 // Group is a named set of users with attached policies.
 type Group struct {
 	Name     string    `json:"n"`
+	Path     string    `json:"path,omitempty"`
 	Enabled  bool      `json:"e"`
 	Members  []string  `json:"m,omitempty"`
 	Policies []string  `json:"p,omitempty"`
@@ -61,6 +63,7 @@ type Group struct {
 // Policy is a named policy document.
 type Policy struct {
 	Name     string          `json:"n"`
+	Path     string          `json:"path,omitempty"`
 	Document json.RawMessage `json:"d"`
 	Created  time.Time       `json:"c"`
 	Updated  time.Time       `json:"u"`

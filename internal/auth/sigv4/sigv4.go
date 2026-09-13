@@ -131,10 +131,10 @@ func parseHeader(r *http.Request, auth string) (*Parsed, error) {
 		}
 		p.Date = t
 	}
+	// S3 requires x-amz-content-sha256; other AWS services (IAM, STS) do not
+	// send it and sign the SHA-256 of the body instead. The caller fills
+	// ContentSHA256 from the body when it is empty, or rejects the request.
 	p.ContentSHA256 = r.Header.Get("X-Amz-Content-Sha256")
-	if p.ContentSHA256 == "" {
-		return nil, ErrMissingContentHash
-	}
 	p.SessionToken = r.Header.Get("X-Amz-Security-Token")
 	return p, nil
 }

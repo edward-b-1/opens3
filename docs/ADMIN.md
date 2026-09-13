@@ -19,22 +19,22 @@ be the hex SHA-256 of the body. `UNSIGNED-PAYLOAD` is only accepted for
 empty bodies; a mismatching hash is rejected with
 `400 XAmzContentSHA256Mismatch` before the operation runs.
 
-Each endpoint is an IAM action named `admin:<Operation>` (listed in the
+Each endpoint is authorised by an AWS-style action (`iam:*`, `kms:*`, `s3:*`, `opens3:*` for operations AWS has no equivalent for; listed in the
 table below). The root account may call everything. Other identities need
 an identity policy (attached to the user or one of its groups) that allows
 the action; bucket policies and ACLs never grant admin actions. Two
 built-in policies cover the common cases:
 
-- `consoleAdmin` — `admin:*` plus `s3:*` (full administrator)
-- `diagnostics` — `admin:ServerInfo`, `admin:Health`, `admin:Prometheus`, `admin:Metrics`
+- `consoleAdmin` — `iam:*, kms:*, sts:*, opens3:*` plus `s3:*` (full administrator)
+- `diagnostics` — `opens3:ServerInfo`, `opens3:Health`, `opens3:Metrics`, `opens3:Metrics`
 
 A custom policy can grant a subset, e.g. a user-management-only operator:
 
 ```json
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
-  "Action":["admin:ListUsers","admin:GetUser","admin:AddUser","admin:RemoveUser",
-            "admin:EnableUser","admin:DisableUser","admin:SetUserPolicies",
-            "admin:ListKeys","admin:AddKey","admin:RemoveKey","admin:RotateKey"],
+  "Action":["iam:ListUsers","iam:GetUser","iam:CreateUser","iam:DeleteUser",
+            "iam:UpdateUser","iam:UpdateUser","iam:AttachUserPolicy",
+            "iam:ListAccessKeys","iam:CreateAccessKey","iam:DeleteAccessKey","iam:UpdateAccessKey"],
   "Resource":["arn:aws:s3:::*"]}]}
 ```
 
@@ -57,36 +57,36 @@ A custom policy can grant a subset, e.g. a user-management-only operator:
 
 | Method and path | Action | Description |
 |---|---|---|
-| `GET info` | `admin:ServerInfo` | Version, region, start time, uptime, bucket count, object count and bytes (computed by scanning metadata), disk stats. |
-| `GET health` | `admin:Health` | Readiness (same check as `/opens3/health/ready`); `{"status":"ok"}`. |
-| `GET users` | `admin:ListUsers` | All users. |
-| `GET users/{name}` | `admin:GetUser` | One user: `name, enabled, policies[], groups[], created`. |
-| `PUT users/{name}` | `admin:AddUser` | Create or update. Body `{"secret_key"?, "policies"?}`. On creation a key with access key = user name is created when `secret_key` is given (MinIO convention). On update `secret_key` rotates/creates that key; `policies` (when present) replaces the attached policies. |
-| `DELETE users/{name}` | `admin:RemoveUser` | Delete the user, all its keys and group memberships. |
-| `POST users/{name}/enable` | `admin:EnableUser` | Enable; returns the user. |
-| `POST users/{name}/disable` | `admin:DisableUser` | Disable (all its keys stop working). |
-| `PUT users/{name}/policies` | `admin:SetUserPolicies` | Body `{"policies":[...]}` replaces the attached policies. |
-| `GET keys?user=` | `admin:ListKeys` | Access keys (all, or of one user), including STS sessions (`kind: sts`). |
-| `GET keys/{ak}` | `admin:GetKey` | One key record. |
-| `POST keys` | `admin:AddKey` | Body `{"user", "access_key"?, "secret_key"?, "kind": "user"\|"service", "session_policy"?, "expires"?, "description"?}`. Empty access/secret keys are generated. Returns `201` with `secret_key` (the only time it is shown). A `service` key may carry a `session_policy` that restricts the owner's permissions and an `expires` time. |
-| `DELETE keys/{ak}` | `admin:RemoveKey` | Delete the key. |
-| `POST keys/{ak}/enable` | `admin:EnableKey` | Enable. |
-| `POST keys/{ak}/disable` | `admin:DisableKey` | Disable. |
-| `POST keys/{ak}/rotate` | `admin:RotateKey` | Body `{"secret_key"?}`; generated when empty. Returns the key with the new secret. |
-| `GET groups` | `admin:ListGroups` | All groups. |
-| `GET groups/{name}` | `admin:GetGroup` | `name, enabled, members[], policies[], created`. |
-| `PUT groups/{name}` | `admin:AddGroup` | Create or update. Body `{"members"?, "policies"?}`; on update a missing field is left unchanged, a present one replaces. |
-| `DELETE groups/{name}` | `admin:RemoveGroup` | Delete the group (members keep their user records). |
-| `POST groups/{name}/members` | `admin:UpdateGroupMembers` | Body `{"add":[...], "remove":[...]}`. |
-| `GET policies` | `admin:ListPolicies` | Named policies without documents (`name, builtin, created, updated`). |
-| `GET policies/{name}` | `admin:GetPolicy` | Includes `document`. |
-| `PUT policies/{name}` | `admin:AddPolicy` | Body is the raw IAM policy JSON document. Creates or replaces. Built-in policies (`readonly`, `readwrite`, `writeonly`, `diagnostics`, `consoleAdmin`) cannot be changed. |
-| `DELETE policies/{name}` | `admin:RemovePolicy` | Delete and detach from every user and group. |
-| `GET buckets?usage=true` | `admin:ListBuckets` | `name, created, owner, versioning, object_lock`; with `usage=true` also `objects` and `bytes` (scans the bucket's metadata). |
-| `DELETE buckets/{name}?force=true` | `admin:RemoveBucket` | Delete a bucket; without `force` a non-empty bucket answers `409 BucketNotEmpty`. With `force` every version, upload and blob is removed. |
-| `GET kms/keys` | `admin:ListKMSKeys` | Named SSE-KMS keys of the local KMS. |
-| `POST kms/keys` | `admin:CreateKMSKey` | Body `{"id"}`. |
-| `DELETE kms/keys/{id}` | `admin:DeleteKMSKey` | Delete a key. Objects encrypted with it become unreadable; the default key cannot be deleted. |
+| `GET info` | `opens3:ServerInfo` | Version, region, start time, uptime, bucket count, object count and bytes (computed by scanning metadata), disk stats. |
+| `GET health` | `opens3:Health` | Readiness (same check as `/opens3/health/ready`); `{"status":"ok"}`. |
+| `GET users` | `iam:ListUsers` | All users. |
+| `GET users/{name}` | `iam:GetUser` | One user: `name, enabled, policies[], groups[], created`. |
+| `PUT users/{name}` | `iam:CreateUser` | Create or update. Body `{"secret_key"?, "policies"?}`. On creation a key with access key = user name is created when `secret_key` is given (MinIO convention). On update `secret_key` rotates/creates that key; `policies` (when present) replaces the attached policies. |
+| `DELETE users/{name}` | `iam:DeleteUser` | Delete the user, all its keys and group memberships. |
+| `POST users/{name}/enable` | `iam:UpdateUser` | Enable; returns the user. |
+| `POST users/{name}/disable` | `iam:UpdateUser` | Disable (all its keys stop working). |
+| `PUT users/{name}/policies` | `iam:AttachUserPolicy` | Body `{"policies":[...]}` replaces the attached policies. |
+| `GET keys?user=` | `iam:ListAccessKeys` | Access keys (all, or of one user), including STS sessions (`kind: sts`). |
+| `GET keys/{ak}` | `iam:ListAccessKeys` | One key record. |
+| `POST keys` | `iam:CreateAccessKey` | Body `{"user", "access_key"?, "secret_key"?, "kind": "user"\|"service", "session_policy"?, "expires"?, "description"?}`. Empty access/secret keys are generated. Returns `201` with `secret_key` (the only time it is shown). A `service` key may carry a `session_policy` that restricts the owner's permissions and an `expires` time. |
+| `DELETE keys/{ak}` | `iam:DeleteAccessKey` | Delete the key. |
+| `POST keys/{ak}/enable` | `iam:UpdateAccessKey` | Enable. |
+| `POST keys/{ak}/disable` | `iam:UpdateAccessKey` | Disable. |
+| `POST keys/{ak}/rotate` | `iam:UpdateAccessKey` | Body `{"secret_key"?}`; generated when empty. Returns the key with the new secret. |
+| `GET groups` | `iam:ListGroups` | All groups. |
+| `GET groups/{name}` | `iam:GetGroup` | `name, enabled, members[], policies[], created`. |
+| `PUT groups/{name}` | `iam:CreateGroup` | Create or update. Body `{"members"?, "policies"?}`; on update a missing field is left unchanged, a present one replaces. |
+| `DELETE groups/{name}` | `iam:DeleteGroup` | Delete the group (members keep their user records). |
+| `POST groups/{name}/members` | `iam:AddUserToGroup` | Body `{"add":[...], "remove":[...]}`. |
+| `GET policies` | `iam:ListPolicies` | Named policies without documents (`name, builtin, created, updated`). |
+| `GET policies/{name}` | `iam:GetPolicy` | Includes `document`. |
+| `PUT policies/{name}` | `iam:CreatePolicy` | Body is the raw IAM policy JSON document. Creates or replaces. Built-in policies (`readonly`, `readwrite`, `writeonly`, `diagnostics`, `consoleAdmin`) cannot be changed. |
+| `DELETE policies/{name}` | `iam:DeletePolicy` | Delete and detach from every user and group. |
+| `GET buckets?usage=true` | `s3:ListAllMyBuckets` | `name, created, owner, versioning, object_lock`; with `usage=true` also `objects` and `bytes` (scans the bucket's metadata). |
+| `DELETE buckets/{name}?force=true` | `s3:DeleteBucket` | Delete a bucket; without `force` a non-empty bucket answers `409 BucketNotEmpty`. With `force` every version, upload and blob is removed. |
+| `GET kms/keys` | `kms:ListKeys` | Named SSE-KMS keys of the local KMS. |
+| `POST kms/keys` | `kms:CreateKey` | Body `{"id"}`. |
+| `DELETE kms/keys/{id}` | `kms:ScheduleKeyDeletion` | Delete a key. Objects encrypted with it become unreadable; the default key cannot be deleted. |
 
 Unknown paths under the prefix answer `404 NotFound` (after
 authentication).

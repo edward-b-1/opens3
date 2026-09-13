@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"gitlab.com/Birdsall/opens3/internal/iam"
+	"gitlab.com/Birdsall/opens3/internal/iamapi"
 	"gitlab.com/Birdsall/opens3/internal/kms"
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/object"
@@ -41,11 +42,12 @@ type Config struct {
 
 // Server serves the S3 API.
 type Server struct {
-	obj *object.Service
-	iam *iam.Store
-	kms *kms.Local
-	cfg Config
-	log *slog.Logger
+	obj    *object.Service
+	iam    *iam.Store
+	kms    *kms.Local
+	iamAPI *iamapi.Handler
+	cfg    Config
+	log    *slog.Logger
 	// Metrics hooks (set by the server package); nil-safe.
 	OnRequest func(op string, status int, dur time.Duration, bytesIn, bytesOut int64)
 	// ValidateTarget checks that a notification destination ARN is
@@ -64,7 +66,7 @@ func New(obj *object.Service, ia *iam.Store, k *kms.Local, cfg Config, log *slog
 	if cfg.HostID == "" {
 		cfg.HostID = "opens3"
 	}
-	return &Server{obj: obj, iam: ia, kms: k, cfg: cfg, log: log}
+	return &Server{obj: obj, iam: ia, kms: k, cfg: cfg, log: log, iamAPI: &iamapi.Handler{IAM: ia, Log: log}}
 }
 
 // ctxKey is the context key type.

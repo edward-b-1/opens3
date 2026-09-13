@@ -2,7 +2,6 @@ package iam
 
 import (
 	"encoding/json"
-	"strings"
 
 	"gitlab.com/Birdsall/opens3/internal/meta"
 	"gitlab.com/Birdsall/opens3/internal/policy"
@@ -23,6 +22,9 @@ type Request struct {
 	// Object state (for object-level operations on existing objects).
 	ObjectOwner string
 	ObjectACL   *meta.ACL
+	// SelfLockConfirmed: the bucket owner confirmed a policy that may lock
+	// it out of policy operations, so the root escape hatch is off.
+	SelfLockConfirmed bool
 	// Condition context keys (lower-case) → values.
 	Conditions map[string][]string
 }
@@ -72,7 +74,7 @@ func (s *Store) Authorize(r Request) bool {
 	}
 	if bp == policy.Denied {
 		// Root escape hatch for bucket policy management.
-		if id != nil && id.IsRoot && (r.Action == "s3:PutBucketPolicy" || r.Action == "s3:DeleteBucketPolicy" || r.Action == "s3:GetBucketPolicy") {
+		if id != nil && id.IsRoot && !r.SelfLockConfirmed && (r.Action == "s3:PutBucketPolicy" || r.Action == "s3:DeleteBucketPolicy" || r.Action == "s3:GetBucketPolicy") {
 			return true
 		}
 		return false
@@ -111,8 +113,8 @@ func (s *Store) Authorize(r Request) bool {
 				return false
 			}
 		}
-		// admin:* actions are only granted by identity policies.
-		if strings.HasPrefix(r.Action, "admin:") {
+		// Administrative actions are only granted by identity policies.
+		if IsAdministrative(r.Action) {
 			return ip == policy.Allowed
 		}
 	}

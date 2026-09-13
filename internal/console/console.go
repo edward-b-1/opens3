@@ -387,7 +387,7 @@ type meResponse struct {
 
 func (h *Handler) meInfo(s *session, exp time.Time) meResponse {
 	m := meResponse{User: s.id.Name(), ARN: s.id.ARN(), CanonicalID: s.id.CanonicalID(), IsRoot: s.id.IsRoot, Region: h.d.Region, Version: h.d.Version,
-		Admin: h.allowedAdmin(s, "admin:ServerInfo") && h.allowedAdmin(s, "admin:ListUsers"), Policies: []string{}, Groups: []string{}}
+		Admin: h.allowedAdmin(s, "opens3:ServerInfo") && h.allowedAdmin(s, "iam:ListUsers"), Policies: []string{}, Groups: []string{}}
 	if s.id.User != nil {
 		m.Policies = append(m.Policies, s.id.User.Policies...)
 		m.Groups = append(m.Groups, s.id.User.Groups...)
@@ -439,7 +439,7 @@ func describe(bucket, key string) string {
 	}
 }
 
-// admin authorises an admin:* action (identity policies only).
+// admin authorises an administrative (iam/kms/opens3) action; identity policies only.
 func (h *Handler) admin(s *session, action string) error {
 	if !h.allowedAdmin(s, action) {
 		return apiErr(http.StatusForbidden, "AccessDenied", "administrative permission "+action+" is required")

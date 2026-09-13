@@ -84,6 +84,9 @@ type Bucket struct {
 	PublicAccessBlock *PublicAccessBlock `json:"pab,omitempty"`
 	Ownership         string             `json:"own,omitempty"` // BucketOwnerEnforced | BucketOwnerPreferred | ObjectWriter
 	Quota             *Quota             `json:"q,omitempty"`
+	// SelfLock records that the owner confirmed (x-amz-confirm-remove-self-
+	// bucket-access) a policy that may deny it access to the policy itself.
+	SelfLock bool `json:"sl,omitempty"`
 
 	// Raw XML configurations.
 	LifecycleXML          []byte            `json:"lc,omitempty"`

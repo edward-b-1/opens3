@@ -32,7 +32,7 @@ func route(c *reqCtx) *operation {
 			return &operation{name: "ListBuckets", action: "s3:ListAllMyBuckets", handler: (*Server).listBuckets}
 		}
 		if m == http.MethodPost && (has(q, "Action") || strings.HasPrefix(c.r.Header.Get("Content-Type"), "application/x-www-form-urlencoded")) {
-			return &operation{name: "STS", handler: (*Server).sts}
+			return &operation{name: "AWSQuery", handler: (*Server).awsQuery}
 		}
 		return nil
 	}

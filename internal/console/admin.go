@@ -17,7 +17,7 @@ import (
 func (h *Handler) info(w http.ResponseWriter, r *http.Request, s *session) error {
 	out := map[string]any{"version": h.d.Version, "region": h.d.Region, "goVersion": runtime.Version(), "uptimeSeconds": int64(time.Since(h.started).Seconds()),
 		"startedAt": h.started.UTC(), "accountId": h.d.IAM.AccountID(), "admin": false}
-	if h.allowedAdmin(s, "admin:ServerInfo") {
+	if h.allowedAdmin(s, "opens3:ServerInfo") {
 		out["admin"] = true
 		host, _ := os.Hostname()
 		out["hostname"] = host
@@ -68,7 +68,7 @@ func userView(u *iam.User, keys int) userOut {
 }
 
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:ListUsers"); err != nil {
+	if err := h.admin(s, "iam:ListUsers"); err != nil {
 		return err
 	}
 	users, err := h.d.IAM.ListUsers()
@@ -92,7 +92,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request, s *session) 
 }
 
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:CreateUser"); err != nil {
+	if err := h.admin(s, "iam:CreateUser"); err != nil {
 		return err
 	}
 	var in struct {
@@ -141,7 +141,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request, s *session)
 }
 
 func (h *Handler) setUserPassword(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:UpdateUser"); err != nil {
+	if err := h.admin(s, "iam:UpdateUser"); err != nil {
 		return err
 	}
 	var in struct {
@@ -158,7 +158,7 @@ func (h *Handler) setUserPassword(w http.ResponseWriter, r *http.Request, s *ses
 }
 
 func (h *Handler) clearUserPassword(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:UpdateUser"); err != nil {
+	if err := h.admin(s, "iam:UpdateUser"); err != nil {
 		return err
 	}
 	if err := h.d.IAM.ClearPassword(r.PathValue("name")); err != nil {
@@ -195,7 +195,7 @@ func (h *Handler) changeMyPassword(w http.ResponseWriter, r *http.Request, s *se
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, s *session) error {
 	name := r.PathValue("name")
 	if name != s.id.Name() {
-		if err := h.admin(s, "admin:GetUser"); err != nil {
+		if err := h.admin(s, "iam:GetUser"); err != nil {
 			return err
 		}
 	}
@@ -218,7 +218,7 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, s *session) er
 }
 
 func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:UpdateUser"); err != nil {
+	if err := h.admin(s, "iam:UpdateUser"); err != nil {
 		return err
 	}
 	name := r.PathValue("name")
@@ -253,7 +253,7 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, s *session)
 }
 
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:DeleteUser"); err != nil {
+	if err := h.admin(s, "iam:DeleteUser"); err != nil {
 		return err
 	}
 	name := r.PathValue("name")
@@ -295,7 +295,7 @@ func (h *Handler) keyAccess(s *session, owner, adminAction string) error {
 
 func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request, s *session) error {
 	user := r.URL.Query().Get("user")
-	if err := h.keyAccess(s, user, "admin:ListKeys"); err != nil {
+	if err := h.keyAccess(s, user, "iam:ListAccessKeys"); err != nil {
 		return err
 	}
 	keys, err := h.d.IAM.ListKeys(user)
@@ -332,7 +332,7 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request, s *session) 
 	if in.AccessKey != "" || in.SecretKey != "" {
 		return badRequest("access keys and secrets are generated; they cannot be chosen here")
 	}
-	if err := h.keyAccess(s, in.User, "admin:CreateKey"); err != nil {
+	if err := h.keyAccess(s, in.User, "iam:CreateAccessKey"); err != nil {
 		return err
 	}
 	if in.Kind == "" {
@@ -368,7 +368,7 @@ func (h *Handler) updateKey(w http.ResponseWriter, r *http.Request, s *session) 
 	if err != nil {
 		return err
 	}
-	if err := h.keyAccess(s, k.User, "admin:UpdateKey"); err != nil {
+	if err := h.keyAccess(s, k.User, "iam:UpdateAccessKey"); err != nil {
 		return err
 	}
 	var in struct {
@@ -432,7 +432,7 @@ func (h *Handler) deleteKey(w http.ResponseWriter, r *http.Request, s *session) 
 	if err != nil {
 		return err
 	}
-	if err := h.keyAccess(s, k.User, "admin:DeleteKey"); err != nil {
+	if err := h.keyAccess(s, k.User, "iam:DeleteAccessKey"); err != nil {
 		return err
 	}
 	if err := h.d.IAM.DeleteKey(ak); err != nil {
@@ -457,7 +457,7 @@ func groupView(g *iam.Group) groupOut {
 }
 
 func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:ListGroups"); err != nil {
+	if err := h.admin(s, "iam:ListGroups"); err != nil {
 		return err
 	}
 	groups, err := h.d.IAM.ListGroups()
@@ -473,7 +473,7 @@ func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request, s *session)
 }
 
 func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:CreateGroup"); err != nil {
+	if err := h.admin(s, "iam:CreateGroup"); err != nil {
 		return err
 	}
 	var in struct {
@@ -497,7 +497,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request, s *session
 }
 
 func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:UpdateGroup"); err != nil {
+	if err := h.admin(s, "iam:UpdateGroup"); err != nil {
 		return err
 	}
 	var in struct {
@@ -533,7 +533,7 @@ func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request, s *session
 }
 
 func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:DeleteGroup"); err != nil {
+	if err := h.admin(s, "iam:DeleteGroup"); err != nil {
 		return err
 	}
 	if err := h.d.IAM.DeleteGroup(r.PathValue("name")); err != nil {
@@ -558,7 +558,7 @@ func policyView(p *iam.Policy) policyOut {
 }
 
 func (h *Handler) listPolicies(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:ListPolicies"); err != nil {
+	if err := h.admin(s, "iam:ListPolicies"); err != nil {
 		return err
 	}
 	pols, err := h.d.IAM.ListPolicies()
@@ -574,7 +574,7 @@ func (h *Handler) listPolicies(w http.ResponseWriter, r *http.Request, s *sessio
 }
 
 func (h *Handler) getIAMPolicy(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:GetPolicy"); err != nil {
+	if err := h.admin(s, "iam:GetPolicy"); err != nil {
 		return err
 	}
 	p, err := h.d.IAM.GetPolicy(r.PathValue("name"))
@@ -586,7 +586,7 @@ func (h *Handler) getIAMPolicy(w http.ResponseWriter, r *http.Request, s *sessio
 }
 
 func (h *Handler) putIAMPolicy(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:PutPolicy"); err != nil {
+	if err := h.admin(s, "iam:CreatePolicy"); err != nil {
 		return err
 	}
 	var in struct {
@@ -611,7 +611,7 @@ func (h *Handler) putIAMPolicy(w http.ResponseWriter, r *http.Request, s *sessio
 }
 
 func (h *Handler) deleteIAMPolicy(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:DeletePolicy"); err != nil {
+	if err := h.admin(s, "iam:DeletePolicy"); err != nil {
 		return err
 	}
 	if err := h.d.IAM.DeletePolicy(r.PathValue("name")); err != nil {
@@ -624,7 +624,7 @@ func (h *Handler) deleteIAMPolicy(w http.ResponseWriter, r *http.Request, s *ses
 // --- KMS -------------------------------------------------------------------
 
 func (h *Handler) listKMSKeys(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:ListKMSKeys"); err != nil {
+	if err := h.admin(s, "kms:ListKeys"); err != nil {
 		return err
 	}
 	keys, err := h.d.KMS.ListKeys()
@@ -646,7 +646,7 @@ func (h *Handler) listKMSKeys(w http.ResponseWriter, r *http.Request, s *session
 }
 
 func (h *Handler) createKMSKey(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:CreateKMSKey"); err != nil {
+	if err := h.admin(s, "kms:CreateKey"); err != nil {
 		return err
 	}
 	var in struct {
@@ -663,7 +663,7 @@ func (h *Handler) createKMSKey(w http.ResponseWriter, r *http.Request, s *sessio
 }
 
 func (h *Handler) deleteKMSKey(w http.ResponseWriter, r *http.Request, s *session) error {
-	if err := h.admin(s, "admin:DeleteKMSKey"); err != nil {
+	if err := h.admin(s, "kms:ScheduleKeyDeletion"); err != nil {
 		return err
 	}
 	if err := h.d.KMS.DeleteKey(r.PathValue("id")); err != nil {

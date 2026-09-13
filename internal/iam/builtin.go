@@ -6,8 +6,8 @@ var builtinPolicies = map[string]string{
 	"readonly":     `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:GetObject","s3:GetObjectVersion","s3:GetObjectTagging","s3:GetObjectAttributes","s3:ListBucket","s3:ListBucketVersions","s3:ListAllMyBuckets","s3:GetBucketVersioning","s3:GetBucketTagging","s3:GetObjectRetention","s3:GetObjectLegalHold","s3:GetBucketObjectLockConfiguration"],"Resource":["arn:aws:s3:::*"]}]}`,
 	"readwrite":    `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::*"]}]}`,
 	"writeonly":    `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::*"]}]}`,
-	"diagnostics":  `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["admin:ServerInfo","admin:Prometheus","admin:Health","admin:Metrics"],"Resource":["arn:aws:s3:::*"]}]}`,
-	"consoleAdmin": `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["admin:*"],"Resource":["arn:aws:s3:::*"]},{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::*"]}]}`,
+	"diagnostics":  `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["opens3:ServerInfo","opens3:Health","opens3:Metrics"],"Resource":["*"]}]}`,
+	"consoleAdmin": `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:*","kms:*","sts:*","opens3:*"],"Resource":["*"]},{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::*"]}]}`,
 }
 
 // BuiltinPolicyNames lists the built-in policies.

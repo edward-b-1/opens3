@@ -7,12 +7,16 @@ import (
 	"strconv"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/s3err"
+	"gitlab.com/Birdsall/opens3/internal/iamapi"
 )
 
-// sts handles the STS AssumeRole family posted to the root path with
-// Action=... form parameters (as MinIO does).
-func (s *Server) sts(c *reqCtx) error {
+const stsNS = "https://sts.amazonaws.com/doc/2011-06-15/"
+
+// awsQuery serves the AWS Query-protocol APIs that share the S3 endpoint:
+// STS (AssumeRole, GetCallerIdentity) and IAM (users, keys, groups,
+// policies, login profiles). Requests are SigV4-signed POSTs to "/" with
+// form-encoded Action=... parameters.
+func (s *Server) awsQuery(c *reqCtx) error {
 	r := c.r
 	raw, err := s.readBody(c)
 	if err != nil {
@@ -28,9 +32,20 @@ func (s *Server) sts(c *reqCtx) error {
 		}
 	}
 	action := form.Get("Action")
-	if action != "AssumeRole" {
-		return s.stsError(c, "InvalidAction", "The action "+action+" is not valid for this web service.")
+	switch action {
+	case "AssumeRole":
+		return s.assumeRole(c, form)
+	case "GetCallerIdentity":
+		return s.getCallerIdentity(c)
 	}
+	if iamapi.Supported(action) {
+		s.iamAPI.Serve(&iamapi.Request{W: c.w, R: r, Form: form, Identity: c.identity, RequestID: c.id})
+		return nil
+	}
+	return s.stsError(c, "InvalidAction", "The action "+action+" is not valid for this web service.")
+}
+
+func (s *Server) assumeRole(c *reqCtx, form url.Values) error {
 	if c.identity == nil {
 		return s.stsError(c, "AccessDenied", "Access Denied")
 	}
@@ -51,7 +66,7 @@ func (s *Server) sts(c *reqCtx) error {
 		return s.stsError(c, "MalformedPolicyDocument", err.Error())
 	}
 	var out xmlAssumeRoleResponse
-	out.Xmlns = "https://sts.amazonaws.com/doc/2011-06-15/"
+	out.Xmlns = stsNS
 	out.Result.Credentials.AccessKeyId, out.Result.Credentials.SecretAccessKey, out.Result.Credentials.SessionToken = ak, sk, tok
 	out.Result.Credentials.Expiration = exp.UTC().Format(time.RFC3339)
 	out.Result.AssumedRoleUser.Arn = "arn:aws:sts::" + s.iam.AccountID() + ":assumed-role/" + c.identity.Name() + "/" + form.Get("RoleSessionName")
@@ -60,16 +75,30 @@ func (s *Server) sts(c *reqCtx) error {
 	return s.writeXML(c, http.StatusOK, out)
 }
 
+// getCallerIdentity is the first thing most people run: `aws sts get-caller-identity`.
+func (s *Server) getCallerIdentity(c *reqCtx) error {
+	if c.identity == nil {
+		return s.stsError(c, "AccessDenied", "Access Denied")
+	}
+	out := xmlGetCallerIdentityResponse{Xmlns: stsNS}
+	out.Result.Arn = c.identity.ARN()
+	out.Result.UserId = c.identity.CanonicalID()[:21]
+	out.Result.Account = s.iam.AccountID()
+	out.ResponseMetadata.RequestId = c.id
+	return s.writeXML(c, http.StatusOK, out)
+}
+
 func (s *Server) stsError(c *reqCtx, code, msg string) error {
 	var e xmlSTSError
-	e.Xmlns = "https://sts.amazonaws.com/doc/2011-06-15/"
+	e.Xmlns = stsNS
 	e.Error.Type, e.Error.Code, e.Error.Message = "Sender", code, msg
 	e.RequestId = c.id
 	status := http.StatusBadRequest
-	if code == "AccessDenied" {
+	switch code {
+	case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken", "RequestTimeTooSkewed":
 		status = http.StatusForbidden
+	case "InternalError":
+		status = http.StatusInternalServerError
 	}
 	return s.writeXML(c, status, e)
 }
-
-var _ = s3err.AccessDenied

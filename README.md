@@ -46,6 +46,7 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 - `docs/API-COVERAGE.md`, `docs/CONFORMANCE.md` — what works, measured
 - `docs/FORMAT.md` — on-disk format and recovery
 - `docs/IAM.md` — identities, access keys, policies, ACLs, how requests are authorised
+- `docs/IAM-API.md` — manage users, keys and policies with `aws iam`
 - `docs/ADMIN.md`, `docs/CONSOLE.md`, `docs/NOTIFICATIONS.md`
 - `GOVERNANCE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
