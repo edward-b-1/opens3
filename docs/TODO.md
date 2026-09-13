@@ -41,12 +41,10 @@ Move an item to "Done" with the commit that closed it.
       to a reverse proxy.
    3. Reload certificate files when they change (no restart for external
       renewal tooling).
-   4. Optional plain-HTTP listener that redirects to HTTPS, and
-      `Strict-Transport-Security` once TLS is on.
-   5. Wildcard certificates for virtual-host bucket addressing
+   4. Wildcard certificates for virtual-host bucket addressing
       (`*.s3.example.com`): document; support a provided wildcard
       certificate first; DNS-01 providers later if needed.
-   6. Mutual TLS (client certificates), later.
+   5. Mutual TLS (client certificates), later.
 
 ## Deferred
 
@@ -69,6 +67,11 @@ Move an item to "Done" with the commit that closed it.
   programmatic key cannot be used in a browser.
 
 ## Done
+
+- TLS item 4: plain-HTTP connections on the TLS port are redirected to
+  https (first-byte sniff, 301 for GET/HEAD, 308 otherwise) and
+  `Strict-Transport-Security` is sent over TLS (`OPENS3_NO_HSTS=1`
+  disables it).
 
 - Identity model moved to the AWS model: generated 20/40-character key
   pairs (never chosen in the console), optional PBKDF2 console passwords,

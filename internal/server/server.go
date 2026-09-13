@@ -28,15 +28,18 @@ import (
 
 // Config is the server configuration.
 type Config struct {
-	Root          string // data directory
-	Address       string // listen address, e.g. ":9000"
-	Region        string
-	Domains       []string // virtual-host-style domains
-	RootUser      string
-	RootPassword  string
-	MasterKey     string // KMS master key material (defaults to derived from root password; set explicitly in production)
-	TLSCert       string
-	TLSKey        string
+	Root         string // data directory
+	Address      string // listen address, e.g. ":9000"
+	Region       string
+	Domains      []string // virtual-host-style domains
+	RootUser     string
+	RootPassword string
+	MasterKey    string // KMS master key material (defaults to derived from root password; set explicitly in production)
+	TLSCert      string
+	TLSKey       string
+	// NoHSTS disables the Strict-Transport-Security header sent over TLS
+	// (it applies to the whole host name, every port).
+	NoHSTS        bool
 	EnforceRegion bool
 	NoFsync       bool
 	AccountID     string
@@ -181,14 +184,19 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.http = &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	handler := s.Handler()
+	if s.cfg.TLSCert != "" && !s.cfg.NoHSTS {
+		handler = hsts(handler)
+	}
+	s.http = &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	if s.cfg.TLSCert != "" {
 		cert, err := tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
 		if err != nil {
 			return err
 		}
-		s.http.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		ln = tls.NewListener(ln, s.http.TLSConfig)
+		s.http.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
+		// Plain-HTTP connections on the same port are redirected to https.
+		ln = newMuxListener(ln, s.http.TLSConfig, s.log)
 	}
 	s.log.Info("opens3 listening", "address", ln.Addr().String(), "root", s.cfg.Root, "tls", s.cfg.TLSCert != "")
 	errc := make(chan error, 1)
@@ -236,6 +244,9 @@ func ConfigFromEnv(cfg Config) Config {
 	cfg.Root = get("ROOT", cfg.Root)
 	cfg.TLSCert = get("TLS_CERT", cfg.TLSCert)
 	cfg.TLSKey = get("TLS_KEY", cfg.TLSKey)
+	if v := get("NO_HSTS", ""); v == "1" || strings.EqualFold(v, "true") {
+		cfg.NoHSTS = true
+	}
 	cfg.AccountID = get("ACCOUNT_ID", cfg.AccountID)
 	cfg.DefaultOwnership = get("DEFAULT_OBJECT_OWNERSHIP", cfg.DefaultOwnership)
 	if d := get("DOMAINS", ""); d != "" {
