@@ -59,8 +59,8 @@ views.objects = async function (main, bucket, prefix) {
     const cols = [
       { h: all, cell: (e) => h('input', { type: 'checkbox', 'aria-label': 'Select ' + (e.prefix || e.key), checked: st.selected.has(keyOf(e)), onChange: (ev) => { ev.target.checked ? st.selected.add(keyOf(e)) : st.selected.delete(keyOf(e)); updateSel(); } }) },
       { h: 'Name', cell: (e) => e.prefix
-        ? h('a', { href: '#' + app.objectsHash(bucket, e.prefix) }, '📁 ' + name(e))
-        : h('a.cell-link', { href: '#', onClick: (ev) => { ev.preventDefault(); showDetail(e); }, class: e.deleteMarker ? 'muted' : '' }, name(e), e.deleteMarker ? [' ', badge('delete marker', 'warn')] : null, st.versions && e.isLatest ? [' ', badge('latest', 'ok')] : null) },
+        ? h('a.name-cell', { href: '#' + app.objectsHash(bucket, e.prefix) }, ui.fileIcon(e.prefix, 'folder'), name(e))
+        : h('a.cell-link.name-cell', { href: '#', onClick: (ev) => { ev.preventDefault(); showDetail(e); }, class: e.deleteMarker ? 'muted' : '' }, ui.fileIcon(e.key), name(e), e.deleteMarker ? [' ', badge('delete marker', 'warn')] : null, st.versions && e.isLatest ? [' ', badge('latest', 'ok')] : null) },
       { h: 'Size', cls: 'num', cell: (e) => e.prefix || e.deleteMarker ? '' : fmtBytes(e.size) },
       { h: 'Modified', cell: (e) => e.prefix ? '' : fmtDate(e.lastModified) },
     ];
@@ -87,7 +87,7 @@ views.objects = async function (main, bucket, prefix) {
       const kv = (pairs) => h('dl.kv', pairs.filter((p) => p[1] !== undefined && p[1] !== null && p[1] !== '').map(([k, v]) => [h('dt', k), h('dd', v)]));
       const meta = Object.entries(o.userMeta || {});
       panel.append(h('div.card',
-        h('div.row.between', h('h2', { style: 'word-break:break-all' }, o.key.split('/').pop()), h('button.btn.btn-ghost.icon-btn', { 'aria-label': 'Close details', onClick: () => clear(panel) }, '×')),
+        h('div.row.between', h('h2.name-cell', { style: 'word-break:break-all' }, ui.fileIcon(o.key), o.key.split('/').pop()), h('button.btn.btn-ghost.icon-btn', { 'aria-label': 'Close details', onClick: () => clear(panel) }, '×')),
         h('div.row', { style: 'margin-bottom:12px' },
           h('a.btn.btn-primary.btn-sm', { href: api.downloadURL(bucket, o.key, o.versionId), download: '' }, 'Download'),
           h('a.btn.btn-sm', { href: api.downloadURL(bucket, o.key, o.versionId, true), target: '_blank', rel: 'noopener' }, 'Open'),

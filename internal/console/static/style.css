@@ -176,3 +176,19 @@ pre.code { background: var(--surface-2); border: 1px solid var(--border); border
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); width: 100%; max-width: 520px; max-height: calc(100vh - 32px); overflow: auto; padding: 20px; }
 .modal.wide { max-width: 760px; }
 .modal h2 { font-size: 17px; margin-bottom: 14px; }
+
+/* File-type icons (icons.js) */
+.name-cell { display: inline-flex; align-items: center; gap: 7px; }
+.ficon { display: inline-flex; flex: none; width: 16px; height: 16px; color: var(--muted); }
+.ficon svg { width: 16px; height: 16px; }
+.ficon-folder { color: #d99a1e; }
+.ficon-image { color: #2f9e6e; }
+.ficon-video { color: #7a5af8; }
+.ficon-audio { color: #d6467c; }
+.ficon-archive { color: #c77d2b; }
+.ficon-pdf { color: #d0453b; }
+.ficon-sheet { color: #1f8f4e; }
+.ficon-doc { color: #2f6fd6; }
+.ficon-slides { color: #e0742a; }
+.ficon-code { color: #5b6b7b; }
+.ficon-data { color: #7f8c3a; }
