@@ -35,26 +35,21 @@ Move an item to "Done" with the commit that closed it.
    blobs and dangling records, optionally repair, and export a bucket (or
    everything) to plain files. Read-only mode must work on a live data
    root's copy; repair needs the server stopped.
-4. **Browser-level console smoke test.** The login-form field-name bug
-   escaped every Go test because nothing exercises the page's JavaScript.
-   Add a headless-browser test (Docker tier, alongside `make awscli`) that
-   signs in, creates a bucket, uploads/downloads/deletes an object, creates
-   a user and key, and changes settings.
-5. **Audit log.** Structured JSON record per request (who, action, bucket,
+4. **Audit log.** Structured JSON record per request (who, action, bucket,
    key, source address, status, latency, request id) to a file and/or
    webhook target; separate from access logging (PLAN phase 2).
-6. **Phase 2 features** (docs/PLAN.md): replication worker, bucket quotas,
+5. **Phase 2 features** (docs/PLAN.md): replication worker, bucket quotas,
    website endpoint serving, access-log delivery, inventory reports, more
    notification targets, the remaining s3-tests failures.
-7. **Erasure coding across local disks** (PLAN phase 4): the feature the
+6. **Erasure coding across local disks** (PLAN phase 4): the feature the
    MinIO audience most expects; a new blob backend with Reed-Solomon
    striping, bitrot detection, healing and disk-failure handling. Start
    only on a released, tested base.
 
-8. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
+7. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
    `aws:kms`; either implement the second AES layer or reject the value.
 
-9. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
+8. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
     stopped) adds a new key to the ring; `opens3 master-key rewrap` re-wraps
     every stored secret, KMS key and SSE-S3 data key under the newest key so
     old keys can be dropped. Later: an external key service (Vault or
@@ -68,6 +63,9 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- Console lint (`make lint-js`, ESLint no-undef) and Playwright smoke test
+  (`make console-test`, Chromium/Firefox/WebKit, fails on any page error).
 
 - Console: bucket default encryption (none / SSE-S3 / SSE-KMS with a
   named key). Decision: objects are not encrypted by default.
