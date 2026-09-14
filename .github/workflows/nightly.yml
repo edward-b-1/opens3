@@ -18,6 +18,7 @@ jobs:
       - run: make awscli
       - run: make console-test
       - run: make rotation-test
+      - run: make migration-test
       - uses: actions/upload-artifact@v4
         if: always()
         with:

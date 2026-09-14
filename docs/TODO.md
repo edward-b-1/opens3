@@ -44,8 +44,13 @@ decision, not dropped; the next one to pick up is the audit log (item
 
 - **MinIO admin API compatibility.** Serve MinIO's admin protocol under
   `/minio/admin/v3/` with MinIO's names and conventions so that `mc admin`
-  and `madmin-go` scripts work unchanged against OpenS3. Part of the MinIO
-  migration work, which is deferred; do not start without agreement.
+  and `madmin-go` scripts work unchanged against OpenS3. Deferred; do not
+  start without agreement.
+- **In-place MinIO data migration** (reading MinIO's on-disk format) is
+  retired in favour of the API-based procedure in the manual, chapter 11,
+  with `examples/migrate/` and `make migration-test`. A future
+  `opens3 migrate` command may wrap that procedure in one step (objects,
+  tags, identities, verification); the on-disk converter is not planned.
 
 ## Done
 

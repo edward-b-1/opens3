@@ -8,6 +8,7 @@ tests/awscli/results
 tests/console/results
 tests/console/node_modules
 tests/rotation/results
+tests/migration/results
 examples/python/.venv
 examples/python/generated
 examples/python/downloads

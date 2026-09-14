@@ -70,6 +70,12 @@ awscli:
 rotation-test:
 	tests/rotation/run.sh
 
+# MinIO to OpenS3 migration, as the manual describes it, against a real
+# MinIO (needs Docker; pulls a pinned MinIO release from quay.io).
+.PHONY: migration-test
+migration-test:
+	tests/migration/run.sh
+
 # Compile the user manual (docs/manual/src/*.md) into docs/MANUAL.md.
 .PHONY: manual
 manual:

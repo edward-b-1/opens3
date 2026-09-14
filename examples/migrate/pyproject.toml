@@ -1,0 +1,9 @@
+[project]
+name = "opens3-migrate"
+version = "0.1.0"
+description = "Helpers for migrating identities and tags from MinIO to OpenS3"
+requires-python = ">=3.10"
+dependencies = ["boto3>=1.34"]
+
+[tool.uv]
+package = false

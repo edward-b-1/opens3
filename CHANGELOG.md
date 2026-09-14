@@ -13,6 +13,14 @@ tagged tree.
 
 ## [Unreleased]
 
+### Added
+
+- Manual chapter 11, "Migrating from MinIO": the API-based procedure
+  (`mc mirror`, identity export with `mc admin`, import with
+  `examples/migrate/import_identities.py`, tags with `copy_tags.py`,
+  verification with `opens3 fsck`), tested end to end against a real
+  MinIO in Docker by `make migration-test`.
+
 ## [0.3.0] - 2026-09-14
 
 The first release under the AGPL-3.0-or-later (see Changed), with a

@@ -10,4 +10,5 @@ coverage.html
 /tests/awscli/results/
 /tests/console/results/
 /tests/rotation/results/
+/tests/migration/results/
 /tests/console/.cache/
