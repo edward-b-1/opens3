@@ -1,7 +1,7 @@
 GO ?= go
 BIN := bin/opens3
 
-.PHONY: build test vet ci run clean fmt docker
+.PHONY: build test vet ci run clean fmt docker release-check release-snapshot
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -10,6 +10,27 @@ build:
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t opens3:$(VERSION) .
+
+# Release tooling (GoReleaser v2, run via `go run` so nothing needs
+# installing; the first run compiles it). Tagged releases are built by
+# .github/workflows/release.yml, see docs/RELEASING.md.
+#   make release-check      validate .goreleaser.yaml
+#   make release-snapshot   build dist/ (archives, checksums) for this commit
+#                           without publishing, signing or SBOMs;
+#                           RELEASE_DOCKER=1 also builds the container images
+#                           (needs buildx with linux/arm64 support).
+GORELEASER_VERSION ?= v2.18.1
+GORELEASER := $(GO) run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
+RELEASE_SKIP := publish,sign,sbom
+ifneq ($(RELEASE_DOCKER),1)
+RELEASE_SKIP := $(RELEASE_SKIP),docker
+endif
+
+release-check:
+	$(GORELEASER) check
+
+release-snapshot:
+	$(GORELEASER) release --snapshot --clean --skip=$(RELEASE_SKIP)
 
 test:
 	$(GO) test ./...

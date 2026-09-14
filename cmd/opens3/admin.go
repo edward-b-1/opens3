@@ -16,8 +16,6 @@ import (
 	"github.com/edward-b-1/opens3/internal/admin"
 )
 
-func init() { admin.Version = version }
-
 const adminUsage = `usage: opens3 admin [flags] <command> [args]
 
 flags:

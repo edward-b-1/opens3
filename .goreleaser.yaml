@@ -1,0 +1,211 @@
+# GoReleaser v2 configuration: `make release-check` validates it,
+# `make release-snapshot` builds dist/ locally, and
+# .github/workflows/release.yml runs `goreleaser release --clean` on every
+# v* tag with keyless Sigstore signing. docs/RELEASING.md describes the
+# process; GOVERNANCE.md section 4 states the promises this file keeps
+# (reproducible builds, Sigstore signatures, SBOM).
+version: 2
+
+project_name: opens3
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: opens3
+    main: ./cmd/opens3
+    binary: opens3
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # Reproducible: the binary's embedded timestamp is the commit's, not the
+    # build's, so two builds of the same commit are byte-identical.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
+
+archives:
+  - id: tarballs
+    ids: [opens3]
+    formats: [tar.gz]
+    name_template: "opens3_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    files:
+      - LICENSE
+      - README.md
+      - docs/MANUAL.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# One SPDX document per archive, produced by syft. The SBOMs are listed in
+# checksums.txt and therefore covered by its signature.
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.spdx.json"
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+# Keyless Sigstore signature of the checksums file: the workflow's OIDC
+# identity signs it and the certificate is recorded in the Rekor log.
+# cosign v3 writes signature, certificate and log entry into one bundle.
+# Verify with:
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/vX.Y.Z \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     checksums.txt
+signs:
+  - id: checksums
+    cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    output: true
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+
+# Container image: one multi-platform manifest (linux/amd64, linux/arm64)
+# built with buildx from Dockerfile.goreleaser, which copies the released
+# binary so the image ships exactly the bytes that were signed and listed
+# in checksums.txt. Dockerfile (make docker) builds the same layout from
+# source for local use. Images are built and pushed in the publish phase,
+# so a snapshot build produces per-platform images tagged
+# <version>-amd64 / <version>-arm64 in the local daemon and does not push.
+dockers_v2:
+  - id: opens3
+    ids: [opens3]
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - ghcr.io/edward-b-1/opens3
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: S3-compatible object store
+      org.opencontainers.image.url: https://github.com/edward-b-1/opens3
+      org.opencontainers.image.source: https://github.com/edward-b-1/opens3
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .CommitDate }}"
+      org.opencontainers.image.licenses: Apache-2.0
+    annotations:
+      "index,manifest:org.opencontainers.image.description": S3-compatible object store
+      "index,manifest:org.opencontainers.image.source": https://github.com/edward-b-1/opens3
+      "index,manifest:org.opencontainers.image.version": "{{ .Version }}"
+      "index,manifest:org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "index,manifest:org.opencontainers.image.licenses": Apache-2.0
+
+# Keyless signatures on the pushed multi-platform image, by digest (so the
+# signature stays valid if a tag is moved). Verify with:
+#   cosign verify ghcr.io/edward-b-1/opens3:X.Y.Z \
+#     --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/vX.Y.Z \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+docker_signs:
+  - id: images
+    cmd: cosign
+    # An empty artifacts filter means "the images built by dockers_v2".
+    artifacts: ""
+    output: true
+    args:
+      - sign
+      - --yes
+      - ${artifact}@${digest}
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+      - "^merge "
+  groups:
+    - title: Fixes
+      regexp: '(?i)^(fix|fixes|bugfix)(\(.*\))?[:!]'
+      order: 0
+    - title: Changes
+      order: 10
+    - title: Documentation
+      regexp: '(?i)^docs?(\(.*\))?[:!]'
+      order: 20
+    - title: Tests
+      regexp: '(?i)^tests?(\(.*\))?[:!]'
+      order: 30
+
+release:
+  github:
+    owner: edward-b-1
+    name: opens3
+  # v0.x releases are normal releases, not pre-releases: the note below
+  # says what is and is not stable.
+  prerelease: false
+  draft: false
+  mode: replace
+  name_template: "OpenS3 {{ .Tag }}"
+  header: |
+    OpenS3 {{ .Tag }}: a single-node S3-compatible object store in one static
+    binary. The hand-written changelog is `CHANGELOG.md` in the tagged tree;
+    the list below is generated from commit subjects.
+
+    **Stability:** the on-disk format (`docs/FORMAT.md`) and the API surface
+    are not frozen until v1.0. Minor releases before then may change them;
+    each will say so in `CHANGELOG.md`.
+
+    **Reports for this version:**
+    [API coverage](https://github.com/edward-b-1/opens3/blob/{{ .Tag }}/docs/API-COVERAGE.md) ·
+    [s3-tests conformance](https://github.com/edward-b-1/opens3/blob/{{ .Tag }}/docs/CONFORMANCE.md) ·
+    [AWS CLI suite](https://github.com/edward-b-1/opens3/blob/{{ .Tag }}/docs/AWSCLI.md) ·
+    [User manual](https://github.com/edward-b-1/opens3/blob/{{ .Tag }}/docs/MANUAL.md)
+
+    **Install** (Linux/macOS, amd64/arm64; `linux_armv7` also provided):
+
+    ```sh
+    V={{ .Version }}; OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+    curl -sSfLO https://github.com/edward-b-1/opens3/releases/download/{{ .Tag }}/opens3_${V}_${OS}_${ARCH}.tar.gz
+    curl -sSfLO https://github.com/edward-b-1/opens3/releases/download/{{ .Tag }}/checksums.txt
+    sha256sum --ignore-missing -c checksums.txt
+    tar -xzf opens3_${V}_${OS}_${ARCH}.tar.gz opens3 && ./opens3 version
+    ```
+
+    Container image: `docker pull ghcr.io/edward-b-1/opens3:{{ .Version }}`
+    (linux/amd64 and linux/arm64). Go: `go install github.com/edward-b-1/opens3/cmd/opens3@{{ .Tag }}`.
+
+    **Verify** the checksums file's keyless Sigstore signature (cosign v3):
+
+    ```sh
+    curl -sSfLO https://github.com/edward-b-1/opens3/releases/download/{{ .Tag }}/checksums.txt.sigstore.json
+    cosign verify-blob --bundle checksums.txt.sigstore.json \
+      --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/{{ .Tag }} \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    cosign verify ghcr.io/edward-b-1/opens3:{{ .Version }} \
+      --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/{{ .Tag }} \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    ```
+
+    Every archive has an SPDX SBOM (`*.sbom.spdx.json`) listed in
+    `checksums.txt`. Builds are reproducible: `make release-snapshot` at the
+    tagged commit yields byte-identical binaries (docs/RELEASING.md).
+  footer: |
+    **Full changelog:** https://github.com/edward-b-1/opens3/blob/{{ .Tag }}/CHANGELOG.md

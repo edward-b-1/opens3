@@ -8,12 +8,23 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"syscall"
 
+	"github.com/edward-b-1/opens3/internal/admin"
 	"github.com/edward-b-1/opens3/internal/server"
 )
 
+// version is set at link time by the Makefile and GoReleaser
+// (-X main.version=...); "dev" otherwise. It is reported by `opens3
+// version`, the startup log, `opens3 admin info` and the console.
 var version = "dev"
+
+func init() {
+	admin.Version = version
+	server.Version = version
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -26,7 +37,7 @@ func main() {
 	case "admin":
 		os.Exit(runAdmin(os.Args[2:]))
 	case "version":
-		fmt.Println("opens3", version)
+		fmt.Println(versionString())
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -34,6 +45,33 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+}
+
+// versionString is "opens3 <version> (<go version> <os>/<arch>, commit
+// <rev>)"; the commit comes from the VCS stamp the Go toolchain embeds and
+// is omitted when the binary was built outside a git checkout.
+func versionString() string {
+	s := fmt.Sprintf("opens3 %s (%s %s/%s", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		var rev, modified string
+		for _, kv := range bi.Settings {
+			switch kv.Key {
+			case "vcs.revision":
+				rev = kv.Value
+			case "vcs.modified":
+				if kv.Value == "true" {
+					modified = "-dirty"
+				}
+			}
+		}
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		if rev != "" {
+			s += ", commit " + rev + modified
+		}
+	}
+	return s + ")"
 }
 
 func usage() {

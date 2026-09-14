@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1
+# Used by GoReleaser (.goreleaser.yaml, dockers_v2:) to package the released
+# binaries: the build context holds only the prebuilt `opens3` per platform
+# (linux/amd64/opens3, linux/arm64/opens3), so the image ships exactly the
+# bytes that were signed and listed in checksums.txt. Keep the runtime
+# layout identical to Dockerfile, which `make docker` uses to build from
+# source locally.
+FROM gcr.io/distroless/static-debian12:nonroot
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/opens3 /opens3
+VOLUME /data
+EXPOSE 9000
+USER nonroot
+ENTRYPOINT ["/opens3"]
+CMD ["server", "--root", "/data", "--address", ":9000"]

@@ -22,13 +22,19 @@ Move an item to "Done" with the commit that closed it.
       certificate first; DNS-01 providers later if needed.
    5. Mutual TLS (client certificates), later.
 
-2. **First tagged release (`v0.1.0`) and release tooling.** GOVERNANCE.md
-   section 4 promises reproducible builds, Sigstore signatures and an SBOM;
-   none of that exists yet. Needed: `make release` cross-compiling static
-   binaries (linux/darwin, amd64/arm64) with `-trimpath` and a pinned
-   toolchain, checksums, cosign signatures, SBOM (syft or `go version -m`
-   based), the Docker image tagged and pushed, and a CHANGELOG. Reports
-   (`API-COVERAGE`, `CONFORMANCE`, `AWSCLI`) should name the version.
+2. **First tagged release (`v0.1.0`).** The tooling promised by
+   GOVERNANCE.md section 4 is in place: `.goreleaser.yaml` (GoReleaser v2:
+   static `-trimpath` builds for linux/darwin amd64/arm64 and linux/armv7
+   with the commit timestamp for reproducibility, tar.gz archives,
+   SHA-256 checksums, SPDX SBOMs, keyless cosign signature on the
+   checksums file, multi-arch `ghcr.io/edward-b-1/opens3` image signed
+   keylessly), `.github/workflows/release.yml` (`make ci` gate, then
+   `goreleaser release` on `v*` tags), `make release-check` /
+   `make release-snapshot`, `CHANGELOG.md`, `docs/RELEASING.md`, install
+   and verification instructions in README.md and the manual. Remaining:
+   review the changes, then tag `v0.1.0` and push the tag
+   (`docs/RELEASING.md`), which runs signing and publishing for the first
+   time; verify the published assets and image from another machine.
 3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
    without the server: walk the metadata, verify every referenced blob
    exists with the right size (and checksum where stored), report orphan

@@ -95,7 +95,7 @@ func (s *Service) UploadPartCopy(ctx context.Context, in UploadPartCopyInput) (*
 		size = src.Range.End - src.Range.Start + 1
 	}
 	if size > MaxPartSize {
-		return nil, nil, s3err.New(s3err.InvalidRequest).WithMessage("The specified copy source is larger than the maximum allowable size for a copy source: %d", MaxPartSize)
+		return nil, nil, s3err.New(s3err.InvalidRequest).WithMessage("The specified copy source is larger than the maximum allowable size for a copy source: %d", int64(MaxPartSize))
 	}
 	p, err := s.UploadPart(ctx, UploadPartInput{Bucket: in.Bucket, Key: in.Key, UploadID: in.UploadID, PartNumber: in.PartNumber, Body: src.Body, Size: size, SSE: in.SSE})
 	if err != nil {

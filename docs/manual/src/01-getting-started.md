@@ -4,19 +4,64 @@
 
 - Linux or macOS, x86-64 or ARM64. One directory on a local filesystem for
   the data root; OpenS3 keeps everything there (chapter 8 shows the layout).
-- Go 1.27 or later to build from source. Docker is optional (used for the
-  container image and the conformance test suites).
+- Nothing else for the release binary. Go 1.27 or later to build from
+  source; Docker is optional (used for the container image and the
+  conformance test suites).
 
-## Build
+## Install
+
+OpenS3 is one static binary. Releases are published at
+https://github.com/edward-b-1/opens3/releases for Linux and macOS on amd64
+and arm64 (and Linux armv7), with a SHA-256 checksums file that is signed
+with Sigstore and an SPDX SBOM per archive. Download, verify and unpack:
 
 ```sh
-git clone https://github.com/edward-b-1/opens3.git
-cd opens3
-make build            # produces bin/opens3
+V=0.1.0; OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+B=https://github.com/edward-b-1/opens3/releases/download/v$V
+curl -sSfLO $B/opens3_${V}_${OS}_${ARCH}.tar.gz
+curl -sSfLO $B/checksums.txt
+curl -sSfLO $B/checksums.txt.sigstore.json
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/v$V \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf opens3_${V}_${OS}_${ARCH}.tar.gz opens3
+sudo install opens3 /usr/local/bin/
+opens3 version
 ```
 
-Or build the container image: `make docker`, or `docker compose up` with
-`OPENS3_ROOT_PASSWORD` set (see `docker-compose.yml`).
+The `cosign verify-blob` step (cosign v3, https://github.com/sigstore/cosign)
+checks that the checksums file was signed by the OpenS3 release workflow
+for that exact tag; `sha256sum` then checks the archive against it. On
+macOS use `shasum -a 256 --ignore-missing -c checksums.txt`. Skipping the
+signature check leaves you with an unverified download; do not skip it for
+a production install.
+
+Other ways to install:
+
+- **Go:** `go install github.com/edward-b-1/opens3/cmd/opens3@latest`
+  (or `@v0.1.0`) builds from the tagged source with your Go toolchain.
+- **Container image:** `ghcr.io/edward-b-1/opens3:0.1.0` (also `:latest`),
+  linux/amd64 and linux/arm64, running as a non-root user with `/data` as
+  the data root and port 9000 exposed. The image is signed: `cosign verify
+  ghcr.io/edward-b-1/opens3:0.1.0` with the same `--certificate-identity`
+  and `--certificate-oidc-issuer` as above.
+
+  ```sh
+  docker run -d --name opens3 -p 9000:9000 -v opens3-data:/data \
+    -e OPENS3_ROOT_USER=root -e OPENS3_ROOT_PASSWORD='a long random password' \
+    ghcr.io/edward-b-1/opens3:0.1.0
+  ```
+
+- **From source:** `git clone https://github.com/edward-b-1/opens3.git &&
+  cd opens3 && make build` produces `bin/opens3`; `make docker` builds the
+  same container image locally, and `docker compose up` with
+  `OPENS3_ROOT_PASSWORD` set runs it (see `docker-compose.yml`).
+
+Until v1.0 the on-disk format and the API surface are not frozen; the
+changelog (`CHANGELOG.md`) says when a release changes them and how to
+migrate.
 
 ## First start
 
@@ -26,7 +71,7 @@ Choose a root user name and a long random password:
 ```sh
 export OPENS3_ROOT_USER=root
 export OPENS3_ROOT_PASSWORD="$(openssl rand -base64 24)"
-bin/opens3 server --root /var/lib/opens3 --address :9000
+opens3 server --root /var/lib/opens3 --address :9000
 ```
 
 On first start the server:

@@ -22,14 +22,46 @@ something: Garage has no versioning or object lock, RustFS has a poor
 security record, SeaweedFS went open-core, Ceph needs a rack. OpenS3's
 commitments are written down in `GOVERNANCE.md`.
 
+## Install
+
+Release binaries are on the
+[GitHub Releases](https://github.com/edward-b-1/opens3/releases) page for
+Linux and macOS (amd64, arm64; Linux armv7 too), built reproducibly,
+signed with Sigstore and shipped with an SBOM (`docs/RELEASING.md`).
+
+```sh
+V=0.1.0; OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+B=https://github.com/edward-b-1/opens3/releases/download/v$V
+curl -sSfLO $B/opens3_${V}_${OS}_${ARCH}.tar.gz
+curl -sSfLO $B/checksums.txt
+curl -sSfLO $B/checksums.txt.sigstore.json
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity https://github.com/edward-b-1/opens3/.github/workflows/release.yml@refs/tags/v$V \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf opens3_${V}_${OS}_${ARCH}.tar.gz opens3 && ./opens3 version
+```
+
+`cosign` is https://github.com/sigstore/cosign (v3). The signature is
+keyless: it proves the file was produced by this repository's release
+workflow for that tag. Other ways to get the binary:
+
+- `go install github.com/edward-b-1/opens3/cmd/opens3@latest` (Go 1.27+;
+  `@v0.1.0` for a specific release)
+- Docker: `docker pull ghcr.io/edward-b-1/opens3:0.1.0` (`:latest`; linux/amd64
+  and linux/arm64; the image is signed, verify with `cosign verify` and the
+  identity above). Run with `-v opens3-data:/data -p 9000:9000` and the root
+  credentials in the environment, or `docker compose up`.
+- From source: `make build` (below).
+
 ## Quick start
 
 ```sh
-make build
 export OPENS3_ROOT_USER=admin OPENS3_ROOT_PASSWORD=change-me-now
-bin/opens3 server --root /var/lib/opens3 --address :9000
+opens3 server --root /var/lib/opens3 --address :9000
 aws --endpoint-url http://localhost:9000 s3 mb s3://demo
-bin/opens3 admin user add alice --secret alicesecret --policy readwrite
+opens3 admin user add alice --policy readwrite
 ```
 
 The console is at http://localhost:9000/console/, health at
@@ -52,6 +84,7 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 - `docs/IAM.md` — identities, access keys, policies, ACLs, how requests are authorised
 - `docs/IAM-API.md` — manage users, keys and policies with `aws iam`
 - `docs/ADMIN.md`, `docs/CONSOLE.md`, `docs/NOTIFICATIONS.md`
+- `CHANGELOG.md`, `docs/RELEASING.md` — what changed, how releases are built and verified
 - `GOVERNANCE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
 ## Source, issues and releases
@@ -63,8 +96,9 @@ https://github.com/edward-b-1/opens3
 Requires Go 1.27 or later.
 
 ```sh
-make build      # bin/opens3
-make ci         # vet + race tests; must pass before every commit
+make build             # bin/opens3
+make ci                # vet + race tests; must pass before every commit
+make release-snapshot  # dist/: the release archives for this commit, unsigned
 ```
 
 ## Licence
