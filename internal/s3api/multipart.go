@@ -117,10 +117,12 @@ func (s *Server) uploadPartCopy(c *reqCtx) error {
 	if sv != "" {
 		srcAction = "s3:GetObjectVersion"
 	}
-	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContext(c),
+	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContextFor(c, srcBucket),
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
 	if so, err := s.obj.StatObject(r.Context(), sb, sk, sv); err == nil {
 		applyObjectContext(&srcReq, so)
+		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), so))
+		r = c.r
 	}
 	if !s.iam.Authorize(srcReq) {
 		return errAccessDenied()

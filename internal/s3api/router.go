@@ -258,6 +258,7 @@ func routeObject(c *reqCtx, m string, q url.Values) *operation {
 			if has(q, "versionId") {
 				o.action = "s3:DeleteObjectVersionTagging"
 			}
+			o.needsObject = true
 			return o
 		case uploadID:
 			return objectOp("AbortMultipartUpload", "s3:AbortMultipartUpload", (*Server).abortMultipartUpload)

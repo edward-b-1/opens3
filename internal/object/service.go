@@ -279,7 +279,7 @@ func (s *Service) ListBuckets(ctx context.Context) ([]*meta.Bucket, error) {
 // under the same name can never lose files to the removal of the old one.
 func (s *Service) DeleteBucket(ctx context.Context, name string) error {
 	err := s.kv.Update(func(tx kv.Txn) error {
-		b, err := getLiveBucket(tx, name)
+		b, err := liveBucket(ctx, tx, name)
 		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(name)
 		} else if err != nil {

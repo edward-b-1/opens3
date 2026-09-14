@@ -225,7 +225,7 @@ func TestAuthorizationContexts(t *testing.T) {
 		t.Fatalf("copy of an untagged source: %v", err)
 	}
 	eva := e.managedUser("eva", `{"Version":"2012-10-17","Statement":[
-		{"Effect":"Allow","Action":["s3:GetObject","s3:GetObjectTagging"],"Resource":"arn:aws:s3:::src/*"},
+		{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::src/*"},
 		{"Effect":"Allow","Action":["s3:PutObject","s3:PutObjectTagging"],"Resource":"arn:aws:s3:::dst/*"}]}`)
 	if _, err := eva.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c3"), CopySource: aws.String("/src/tagged")}); err != nil {
 		t.Fatalf("copy of a tagged source with tagging permissions: %v", err)

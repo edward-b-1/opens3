@@ -73,7 +73,14 @@ func (s *Service) CreateUpload(ctx context.Context, actor Actor, in CreateUpload
 	if enc != nil {
 		u.SSE = enc.info
 	}
-	err = s.kv.Update(func(tx kv.Txn) error { return meta.PutUpload(tx, u) })
+	err = s.kv.Update(func(tx kv.Txn) error {
+		if _, err := liveBucket(ctx, tx, in.Bucket); errors.Is(err, kv.ErrNotFound) {
+			return s3err.New(s3err.NoSuchBucket).WithResource(in.Bucket)
+		} else if err != nil {
+			return err
+		}
+		return meta.PutUpload(tx, u)
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -339,14 +339,9 @@ func (s *Server) copyObject(c *reqCtx) error {
 	if err := s.authorizeAttributes(c, c.r.Header.Get); err != nil {
 		return err
 	}
-	// Tags copied from the source need s3:GetObjectTagging there and
-	// s3:PutObjectTagging here, as on AWS.
+	// Tags copied from the source need s3:PutObjectTagging on the
+	// destination, as on AWS.
 	if soErr == nil && len(so.Tags) > 0 && !strings.EqualFold(r.Header.Get("x-amz-tagging-directive"), "REPLACE") {
-		tagReq := srcReq
-		tagReq.Action = "s3:GetObjectTagging"
-		if !s.iam.Authorize(tagReq) {
-			return s3err.New(s3err.AccessDenied).WithMessage("Access Denied: copying the source's tags requires s3:GetObjectTagging on the source")
-		}
 		if err := s.authorizeAttributes(c, func(h string) string {
 			if h == "x-amz-tagging" {
 				return "copied"

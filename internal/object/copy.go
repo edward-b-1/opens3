@@ -91,6 +91,9 @@ func (s *Service) UploadPartCopy(ctx context.Context, in UploadPartCopyInput) (*
 		return nil, nil, err
 	}
 	defer src.Body.Close()
+	if !sourceExpected(ctx, src.Object) {
+		return nil, nil, errChanged()
+	}
 	size := src.Object.Size
 	if r := in.SrcRange; r != nil && r.Start >= 0 && (r.Start >= src.Object.Size || r.End >= src.Object.Size) {
 		return nil, nil, s3err.New(s3err.InvalidRange).WithMessage("The requested range is not satisfiable").WithExtra("ActualObjectSize", strconv.FormatInt(src.Object.Size, 10))

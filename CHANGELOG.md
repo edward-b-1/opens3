@@ -26,6 +26,13 @@ on-disk format change (a new optional flag on console session records).
   reach the console's self-service key management and create or rotate
   an unrestricted key for its user. The console's credential paths also
   apply the same issuer check as the IAM and admin APIs.
+- Request binding completed: UploadPartCopy binds its source and uses the
+  source bucket's resource tags; browser form uploads, multipart
+  initiation and bucket deletion check the bucket incarnation;
+  DeleteObjectTagging loads the object so tag conditions apply and the
+  version is bound. Copying tags needs `s3:PutObjectTagging` on the
+  destination only (the source `s3:GetObjectTagging` requirement added
+  in 0.2.0 was not AWS behaviour).
 - `opens3 fsck repair` refuses any path or bucket name in a report that
   would lead outside the data directory.
 - Console folder downloads skip object keys that would extract outside

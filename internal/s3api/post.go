@@ -93,6 +93,7 @@ func (s *Server) postObject(c *reqCtx) error {
 	if !c.grant.Allowed() {
 		return errAccessDenied()
 	}
+	c.r = c.r.WithContext(object.WithExpectedBucket(c.r.Context(), c.bkt))
 	// Validate the policy conditions against the fields.
 	var pol postPolicy
 	if policyB64 != "" {
