@@ -3,8 +3,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,11 +36,18 @@ type Config struct {
 	Domains      []string // virtual-host-style domains
 	RootUser     string
 	RootPassword string
-	MasterKey    string // KMS master key material (defaults to derived from root password; set explicitly in production)
-	TLSCert      string
-	TLSKey       string
-	// NoHSTS disables the Strict-Transport-Security header sent over TLS
-	// (it applies to the whole host name, every port).
+	// MasterKey is optional operator-supplied master key material (at least
+	// 32 characters of random data). When empty a random key is generated
+	// on first start and kept in <root>/meta/master.keys (mode 0600).
+	MasterKey string
+	TLSCert   string
+	TLSKey    string
+	// HSTS controls the Strict-Transport-Security header sent over TLS. By
+	// default it is sent only when the certificate is not self-signed, since
+	// browsers remember it for the whole host name for two years and a
+	// self-signed certificate usually means an experimental setup. HSTS
+	// forces it on; NoHSTS forces it off.
+	HSTS          bool
 	NoHSTS        bool
 	EnforceRegion bool
 	NoFsync       bool
@@ -204,15 +213,25 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return err
 	}
 	handler := s.Handler()
-	if s.cfg.TLSCert != "" && !s.cfg.NoHSTS {
-		handler = hsts(handler)
-	}
-	s.http = &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	var cert tls.Certificate
 	if s.cfg.TLSCert != "" {
-		cert, err := tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
+		var err error
+		cert, err = tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
 		if err != nil {
 			return err
 		}
+		selfSigned := false
+		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
+			selfSigned = bytes.Equal(leaf.RawIssuer, leaf.RawSubject)
+		}
+		sendHSTS := (s.cfg.HSTS || !selfSigned) && !s.cfg.NoHSTS
+		s.log.Info("tls", "certificate", s.cfg.TLSCert, "self_signed", selfSigned, "hsts", sendHSTS)
+		if sendHSTS {
+			handler = hsts(handler)
+		}
+	}
+	s.http = &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	if s.cfg.TLSCert != "" {
 		s.http.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
 		// Plain-HTTP connections on the same port are redirected to https.
 		ln = newMuxListener(ln, s.http.TLSConfig, s.log)
@@ -265,6 +284,9 @@ func ConfigFromEnv(cfg Config) Config {
 	cfg.TLSKey = get("TLS_KEY", cfg.TLSKey)
 	if v := get("NO_HSTS", ""); v == "1" || strings.EqualFold(v, "true") {
 		cfg.NoHSTS = true
+	}
+	if v := get("HSTS", ""); v == "1" || strings.EqualFold(v, "true") {
+		cfg.HSTS = true
 	}
 	cfg.AccountID = get("ACCOUNT_ID", cfg.AccountID)
 	cfg.DefaultOwnership = get("DEFAULT_OBJECT_OWNERSHIP", cfg.DefaultOwnership)

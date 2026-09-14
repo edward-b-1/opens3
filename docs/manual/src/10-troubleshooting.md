@@ -58,3 +58,14 @@ attachments first.
 **Bucket policy rejected with "action ... is not supported; use iam:..."**
 The document uses MinIO's `admin:` action names; the message gives the AWS
 name to use.
+
+**Chrome keeps changing `http://` to `https://` after TLS was turned off.**
+Chrome remembers HTTPS for a host in two places: an HSTS rule, if the
+server ever sent `Strict-Transport-Security` (delete the host at
+`chrome://net-internals/#hsts`), and its HTTP cache, if it received a
+permanent redirect (clear "Cached images and files", or reload once with
+DevTools open and "Disable cache" ticked). Current versions of OpenS3 send
+neither for a self-signed certificate: the redirect is temporary and
+uncached, and HSTS is only sent with a certificate from an authority. An
+incognito window, which has neither memory, shows whether the server is
+fine.

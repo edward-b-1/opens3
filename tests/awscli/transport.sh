@@ -44,7 +44,7 @@ CASE_CMD="transport https-client-to-plain-server" fails_with plain-https 'SSL|wr
 
 # 5. Browser side of the TLS port: http console is redirected, https console
 #    serves the page with HSTS.
-CASE_CMD="transport browser-http-redirect" eq console-redirect 301 -- curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "$HTTP_ON_TLS/console/"
+CASE_CMD="transport browser-http-redirect" eq console-redirect 307 -- curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "$HTTP_ON_TLS/console/"
 CASE_CMD="transport browser-http-redirect" eq console-redirect-location "$HTTPS/console/" -- curl -s -o /dev/null -w '%{redirect_url}' -H 'Accept: text/html' "$HTTP_ON_TLS/console/"
 CASE_CMD="transport browser-https" eq console-https 200 -- curl -s -o /dev/null -w '%{http_code}' --cacert "$TLS_CA" "$HTTPS/console/"
 CASE_CMD="transport browser-https" eq console-hsts 'max-age=63072000' -- bash -c "curl -sI --cacert '$TLS_CA' '$HTTPS/console/' | tr -d '\r' | sed -n 's/^[Ss]trict-[Tt]ransport-[Ss]ecurity: //p'"

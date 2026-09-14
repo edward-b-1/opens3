@@ -40,7 +40,8 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
-	s, err := New(Config{Root: dir, Address: addr, RootUser: "rootuser", RootPassword: "rootsecret", NoFsync: true, TLSCert: cert, TLSKey: key,
+	// HSTS is forced on: the test certificate is self-signed, which disables it by default.
+	s, err := New(Config{Root: dir, Address: addr, RootUser: "rootuser", RootPassword: "rootsecret", NoFsync: true, TLSCert: cert, TLSKey: key, HSTS: true,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +66,8 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != 301 || resp.Header.Get("Location") != "https://"+addr+"/console/?x=1" {
-		t.Fatalf("redirect: %d %q", resp.StatusCode, resp.Header.Get("Location"))
+	if resp.StatusCode != 307 || resp.Header.Get("Location") != "https://"+addr+"/console/?x=1" || resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("redirect: %d %q %q", resp.StatusCode, resp.Header.Get("Location"), resp.Header.Get("Cache-Control"))
 	}
 	req, _ := http.NewRequest("PUT", "http://"+addr+"/console/api/x", nil)
 	req.Header.Set("Accept", "text/html")
@@ -75,7 +76,7 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != 308 {
+	if resp.StatusCode != 307 {
 		t.Fatalf("PUT redirect: %d", resp.StatusCode)
 	}
 	// S3 clients get an S3 error naming the https URL, never a redirect.
@@ -120,4 +121,32 @@ func waitForPort(t *testing.T, addr string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("server did not start")
+}
+
+func TestHSTSOffForSelfSigned(t *testing.T) {
+	dir := t.TempDir()
+	cert, key := writeSelfSigned(t, dir)
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	ln.Close()
+	s, err := New(Config{Root: dir, Address: addr, RootUser: "rootuser", RootPassword: "rootsecret", NoFsync: true, TLSCert: cert, TLSKey: key,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := contextWithCancel()
+	done := make(chan error, 1)
+	go func() { done <- s.ListenAndServe(ctx) }()
+	waitForPort(t, addr)
+	tc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	resp, err := tc.Get("https://" + addr + "/opens3/health/ready")
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("https: %v", err)
+	}
+	resp.Body.Close()
+	if resp.Header.Get("Strict-Transport-Security") != "" {
+		t.Fatal("HSTS must not be sent for a self-signed certificate by default")
+	}
+	cancel()
+	<-done
 }

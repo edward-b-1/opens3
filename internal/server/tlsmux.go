@@ -92,13 +92,12 @@ func (m *muxListener) redirect(c net.Conn, br *bufio.Reader) {
 	browser := strings.HasPrefix(req.URL.Path, "/console") || strings.Contains(req.Header.Get("Accept"), "text/html")
 	var resp *http.Response
 	if browser {
-		status := http.StatusPermanentRedirect // keeps the method and body for non-GET clients
-		if req.Method == http.MethodGet || req.Method == http.MethodHead {
-			status = http.StatusMovedPermanently
-		}
+		// 307: browsers do not cache temporary redirects, so turning TLS off
+		// later does not leave a stale upgrade behind (a 301 would).
+		status := http.StatusTemporaryRedirect
 		m.log.Info("redirecting plain http to https", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
 		resp = &http.Response{StatusCode: status, ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{
-			"Location": {target}, "Content-Type": {"text/plain; charset=utf-8"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader("use https://\n")), ContentLength: 13}
+			"Location": {target}, "Content-Type": {"text/plain; charset=utf-8"}, "Cache-Control": {"no-store"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader("use https://\n")), ContentLength: 13}
 	} else {
 		m.log.Info("plain http request to the TLS port refused", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
 		var b bytes.Buffer

@@ -24,7 +24,7 @@ There is no configuration file. Settings come from command-line flags and
 | `OPENS3_MASTER_KEY` | Optional master key material, at least 32 characters of random data (`openssl rand -base64 32`). When set, the key file is not used. See chapter 5. |
 | `OPENS3_ROOT`, `OPENS3_ADDRESS`, `OPENS3_REGION` | Same as the flags. |
 | `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
-| `OPENS3_NO_HSTS` | `1` disables the `Strict-Transport-Security` header sent over TLS. |
+| `OPENS3_HSTS`, `OPENS3_NO_HSTS` | `Strict-Transport-Security` is sent over TLS only when the certificate is not self-signed; `OPENS3_HSTS=1` forces it on, `OPENS3_NO_HSTS=1` forces it off. |
 | `OPENS3_DOMAINS` | Comma-separated domains for virtual-host addressing: a request to `mybucket.s3.example.com` selects `mybucket`. |
 | `OPENS3_ACCOUNT_ID` | The 12-digit account ID in ARNs (`arn:aws:iam::<id>:user/alice`). Default `000000000000`. |
 | `OPENS3_DEFAULT_OBJECT_OWNERSHIP` | Ownership setting for new buckets: `BucketOwnerEnforced` (default; ACLs disabled, as on AWS since 2023), `BucketOwnerPreferred` or `ObjectWriter`. |
@@ -45,12 +45,16 @@ With TLS on:
 - the listener requires TLS 1.2 or later and prefers TLS 1.3;
 - a plain-HTTP request to the same port gets a clear answer instead of a
   handshake error: browsers (the console, or any request accepting HTML)
-  are redirected to `https://`; S3 clients receive a 400 `InvalidRequest`
-  error naming the `https://` URL, because SDKs do not follow redirects on
-  signed requests and some loop on them;
-- responses carry `Strict-Transport-Security` (two years) unless
-  `OPENS3_NO_HSTS=1`. The header applies to the whole host name, so disable
-  it if the same host also serves something over plain HTTP;
+  get a temporary redirect to `https://`, which browsers do not cache; S3
+  clients receive a 400 `InvalidRequest` error naming the `https://` URL,
+  because SDKs do not follow redirects on signed requests and some loop on
+  them;
+- with a certificate from an authority, responses carry
+  `Strict-Transport-Security` (two years), which makes browsers refuse
+  plain HTTP to that host name from then on. With a self-signed certificate
+  the header is not sent, because an experiment with TLS should not leave
+  a two-year rule in every browser that visited; `OPENS3_HSTS=1` forces it
+  on and `OPENS3_NO_HSTS=1` forces it off;
 - console cookies are marked Secure.
 
 For an internal deployment a self-signed certificate is enough. Include

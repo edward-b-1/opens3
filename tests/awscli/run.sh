@@ -139,7 +139,8 @@ for _ in $(seq 1 50); do
   if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then TLS_PORT=$p; break; fi
 done
 TLS_DATA="$(mktemp -d "${TMPDIR:-/tmp}/opens3-awscli-tls.XXXXXX")"
-OPENS3_TLS_CERT="$TLS_DIR/tls.crt" OPENS3_TLS_KEY="$TLS_DIR/tls.key" \
+# OPENS3_HSTS=1: the test certificate is self-signed, which turns HSTS off by default.
+OPENS3_TLS_CERT="$TLS_DIR/tls.crt" OPENS3_TLS_KEY="$TLS_DIR/tls.key" OPENS3_HSTS=1 \
   "$BIN" server --root "$TLS_DATA/data" --address "127.0.0.1:$TLS_PORT" --no-fsync --log-level "${AWSCLI_LOG_LEVEL:-warn}" >"$RESULTS/server-tls.log" 2>&1 &
 TLS_PID=$!
 for _ in $(seq 1 100); do
