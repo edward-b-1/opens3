@@ -88,7 +88,9 @@ commands:
 environment:
   OPENS3_ROOT_USER, OPENS3_ROOT_PASSWORD   root credentials (required)
   OPENS3_MASTER_KEY                        master key material kept outside the data directory (optional)
-  OPENS3_ROOT, OPENS3_ADDRESS, OPENS3_REGION, OPENS3_DOMAINS, OPENS3_TLS_CERT, OPENS3_TLS_KEY`)
+  OPENS3_TLS=self-signed                   HTTPS with a certificate generated under the data root
+  OPENS3_TLS_CERT, OPENS3_TLS_KEY          HTTPS with your own certificate
+  OPENS3_ROOT, OPENS3_ADDRESS, OPENS3_REGION, OPENS3_DOMAINS`)
 }
 
 func runServer(args []string) int {
@@ -99,6 +101,7 @@ func runServer(args []string) int {
 	fs.StringVar(&cfg.Region, "region", "us-east-1", "region name reported to clients")
 	fs.BoolVar(&cfg.EnforceRegion, "enforce-region", false, "reject signatures for other regions")
 	fs.BoolVar(&cfg.NoFsync, "no-fsync", false, "skip fsync on writes (unsafe; benchmarks only)")
+	fs.StringVar(&cfg.TLS, "tls", "", "TLS mode: self-signed (generate a certificate under the data root on first start and reuse it)")
 	fs.StringVar(&cfg.TLSCert, "tls-cert", "", "TLS certificate file")
 	fs.StringVar(&cfg.TLSKey, "tls-key", "", "TLS key file")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")

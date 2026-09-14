@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,8 +41,12 @@ type Config struct {
 	// 32 characters of random data). When empty a random key is generated
 	// on first start and kept in <root>/meta/master.keys (mode 0600).
 	MasterKey string
-	TLSCert   string
-	TLSKey    string
+	// TLS selects how the listener gets its certificate: "" serves plain
+	// HTTP unless TLSCert/TLSKey are set; "self-signed" generates a
+	// certificate under <root>/tls on first start and reuses it.
+	TLS     string
+	TLSCert string
+	TLSKey  string
 	// HSTS controls the Strict-Transport-Security header sent over TLS. By
 	// default it is sent only when the certificate is not self-signed, since
 	// browsers remember it for the whole host name for two years and a
@@ -90,6 +95,9 @@ type Server struct {
 	http *http.Server
 	reg  *prometheus.Registry
 	mx   *metrics
+	addr atomic.Value // net.Addr once listening
+	// tlsFingerprint is set when a self-signed certificate is in use.
+	tlsFingerprint string
 	// Registry is the Prometheus registry for subsystem metrics.
 	Registry *prometheus.Registry
 	// Ext holds subsystem state keyed by name (set by extensions).
@@ -98,6 +106,19 @@ type Server struct {
 
 // New builds the stack. It does not listen.
 func New(cfg Config) (*Server, error) {
+	switch cfg.TLS {
+	case "", "off":
+		cfg.TLS = ""
+	case "self-signed":
+		if cfg.TLSCert != "" || cfg.TLSKey != "" {
+			return nil, errors.New("--tls self-signed cannot be combined with --tls-cert/--tls-key")
+		}
+	default:
+		return nil, fmt.Errorf("unknown --tls mode %q (use self-signed, or --tls-cert/--tls-key for your own certificate)", cfg.TLS)
+	}
+	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
+		return nil, errors.New("--tls-cert and --tls-key must be given together")
+	}
 	if cfg.Log == nil {
 		cfg.Log = slog.Default()
 	}
@@ -213,30 +234,30 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return err
 	}
 	handler := s.Handler()
-	var cert tls.Certificate
-	if s.cfg.TLSCert != "" {
-		var err error
-		cert, err = tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
-		if err != nil {
-			return err
-		}
+	cert, useTLS, err := s.certificate()
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	if useTLS {
 		selfSigned := false
 		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
 			selfSigned = bytes.Equal(leaf.RawIssuer, leaf.RawSubject)
 		}
 		sendHSTS := (s.cfg.HSTS || !selfSigned) && !s.cfg.NoHSTS
-		s.log.Info("tls", "certificate", s.cfg.TLSCert, "self_signed", selfSigned, "hsts", sendHSTS)
+		s.log.Info("tls", "self_signed", selfSigned, "hsts", sendHSTS)
 		if sendHSTS {
 			handler = hsts(handler)
 		}
 	}
 	s.http = &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
-	if s.cfg.TLSCert != "" {
+	if useTLS {
 		s.http.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
 		// Plain-HTTP connections on the same port are redirected to https.
 		ln = newMuxListener(ln, s.http.TLSConfig, s.log)
 	}
-	s.log.Info("opens3 listening", "address", ln.Addr().String(), "root", s.cfg.Root, "tls", s.cfg.TLSCert != "")
+	s.addr.Store(ln.Addr())
+	s.log.Info("opens3 listening", "address", ln.Addr().String(), "root", s.cfg.Root, "tls", useTLS)
 	errc := make(chan error, 1)
 	go func() { errc <- s.http.Serve(ln) }()
 	select {
@@ -253,6 +274,58 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return err
 	}
 }
+
+// certificate resolves the listener certificate from the configuration:
+// the operator's files, a self-signed one kept under the data root, or
+// none (plain HTTP).
+func (s *Server) certificate() (cert tls.Certificate, useTLS bool, err error) {
+	switch {
+	case s.cfg.TLSCert != "":
+		cert, err = tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
+		if err != nil {
+			return cert, false, err
+		}
+		s.log.Info("tls certificate", "source", "files", "certificate", s.cfg.TLSCert)
+		return cert, true, nil
+	case s.cfg.TLS == "self-signed":
+		ss, err := loadOrCreateSelfSigned(filepath.Join(s.cfg.Root, selfSignedDir), s.cfg.Address, s.cfg.Domains, time.Now())
+		if err != nil {
+			return cert, false, err
+		}
+		s.tlsFingerprint = ss.fingerprint
+		attrs := []any{"source", "self-signed", "certificate", ss.certPath, "sha256_fingerprint", ss.fingerprint,
+			"names", ss.names(), "not_after", ss.leaf.NotAfter.UTC().Format(time.RFC3339)}
+		switch {
+		case ss.created:
+			s.log.Warn("generated a self-signed TLS certificate; clients must trust this file or pin the fingerprint", attrs...)
+		case ss.renewed:
+			s.log.Warn("the self-signed TLS certificate had expired and was replaced; clients that pinned the old fingerprint must update", attrs...)
+		default:
+			s.log.Info("tls certificate", attrs...)
+		}
+		if left := time.Until(ss.leaf.NotAfter); left < selfSignedWarnDays*24*time.Hour {
+			s.log.Warn("the self-signed TLS certificate expires soon and will be replaced at the first start after expiry", "days_left", int(left.Hours()/24))
+		}
+		if len(ss.missing) > 0 {
+			s.log.Warn("the self-signed TLS certificate does not cover every name this server answers to; delete it to generate a new one", "missing", ss.missing)
+		}
+		return ss.cert, true, nil
+	}
+	return cert, false, nil
+}
+
+// Addr is the address the server is listening on (nil until
+// ListenAndServe has bound it).
+func (s *Server) Addr() net.Addr {
+	if a, ok := s.addr.Load().(net.Addr); ok {
+		return a
+	}
+	return nil
+}
+
+// TLSFingerprint is the SHA-256 fingerprint of the self-signed
+// certificate, or "" when TLS uses operator files or is off.
+func (s *Server) TLSFingerprint() string { return s.tlsFingerprint }
 
 // Close releases resources.
 func (s *Server) Close() error {
@@ -280,6 +353,7 @@ func ConfigFromEnv(cfg Config) Config {
 	cfg.Region = get("REGION", cfg.Region)
 	cfg.Address = get("ADDRESS", cfg.Address)
 	cfg.Root = get("ROOT", cfg.Root)
+	cfg.TLS = get("TLS", cfg.TLS)
 	cfg.TLSCert = get("TLS_CERT", cfg.TLSCert)
 	cfg.TLSKey = get("TLS_KEY", cfg.TLSKey)
 	if v := get("NO_HSTS", ""); v == "1" || strings.EqualFold(v, "true") {
@@ -298,5 +372,12 @@ func ConfigFromEnv(cfg Config) Config {
 
 // String describes the config without secrets.
 func (c Config) String() string {
-	return fmt.Sprintf("root=%s address=%s region=%s domains=%v tls=%v", c.Root, c.Address, c.Region, c.Domains, c.TLSCert != "")
+	tlsMode := "off"
+	switch {
+	case c.TLSCert != "":
+		tlsMode = "files"
+	case c.TLS != "":
+		tlsMode = c.TLS
+	}
+	return fmt.Sprintf("root=%s address=%s region=%s domains=%v tls=%s", c.Root, c.Address, c.Region, c.Domains, tlsMode)
 }

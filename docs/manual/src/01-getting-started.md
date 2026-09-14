@@ -93,7 +93,9 @@ curl -i http://localhost:9000/opens3/health/ready     # 200, empty body
 
 Open the console at `http://localhost:9000/console/` and sign in with the
 root user name and password. Over plain HTTP from another machine the
-console shows a warning banner; chapter 2 covers TLS.
+console shows a warning banner. Adding `--tls self-signed` to the command
+above serves HTTPS with a certificate the server generates itself;
+chapter 2 covers TLS.
 
 ## First bucket with the AWS CLI
 

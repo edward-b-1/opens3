@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-func writeSelfSigned(t *testing.T, dir string) (string, string) {
+func writeTestCert(t *testing.T, dir string) (string, string) {
 	t.Helper()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "localhost"}, NotBefore: time.Now().Add(-time.Hour),
@@ -36,7 +36,7 @@ func writeSelfSigned(t *testing.T, dir string) (string, string) {
 
 func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	dir := t.TempDir()
-	cert, key := writeSelfSigned(t, dir)
+	cert, key := writeTestCert(t, dir)
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
@@ -125,7 +125,7 @@ func waitForPort(t *testing.T, addr string) {
 
 func TestHSTSOffForSelfSigned(t *testing.T) {
 	dir := t.TempDir()
-	cert, key := writeSelfSigned(t, dir)
+	cert, key := writeTestCert(t, dir)
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()

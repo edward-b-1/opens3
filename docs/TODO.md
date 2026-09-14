@@ -8,19 +8,17 @@ Move an item to "Done" with the commit that closed it.
 1. **TLS.** The listener already serves HTTPS from `--tls-cert`/`--tls-key`
    (TLS 1.2 minimum, Go default ciphers, Secure cookies). Remaining, in
    order of value:
-   1. `--tls self-signed`: generate and persist a key pair under the data
-      root on first start, print the fingerprint, reuse afterwards.
-   2. Automatic public certificates (`--tls acme --tls-domains ...
+   1. Automatic public certificates (`--tls acme --tls-domains ...
       --tls-email ...`) via Let's Encrypt HTTP-01 using
       `golang.org/x/crypto/acme/autocert`, cached under the data root.
       Decision pending: take the dependency, or leave public certificates
       to a reverse proxy.
-   3. Reload certificate files when they change (no restart for external
+   2. Reload certificate files when they change (no restart for external
       renewal tooling).
-   4. Wildcard certificates for virtual-host bucket addressing
+   3. Wildcard certificates for virtual-host bucket addressing
       (`*.s3.example.com`): document; support a provided wildcard
       certificate first; DNS-01 providers later if needed.
-   5. Mutual TLS (client certificates), later.
+   4. Mutual TLS (client certificates), later.
 
 3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
    without the server: walk the metadata, verify every referenced blob
@@ -54,6 +52,11 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- `--tls self-signed` / `OPENS3_TLS=self-signed`: a certificate generated
+  under `<root>/tls` on first start (825 days, replaced when expired),
+  fingerprint and names logged, missing names reported; the AWS CLI
+  transport scenarios run against it.
 
 - **v0.1.0 released** (14 Sep 2026): the GoReleaser workflow ran on a
   rehearsal tag first (`v0.0.1-rc1`, tag deleted afterwards) and then on

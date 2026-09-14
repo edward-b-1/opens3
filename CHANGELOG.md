@@ -13,6 +13,14 @@ tagged tree.
 
 ## [Unreleased]
 
+### Added
+
+- `--tls self-signed` (`OPENS3_TLS=self-signed`): the server generates a
+  certificate and key under `<root>/tls` on first start, reuses them on
+  later starts, replaces them when expired, and logs the SHA-256
+  fingerprint and the names covered. Clients trust the certificate file
+  or pin the fingerprint. `--tls-cert`/`--tls-key` are unchanged.
+
 ## [0.1.0] - 2026-09-14
 
 First release: phase 1 of `docs/PLAN.md`, a single-node S3-compatible

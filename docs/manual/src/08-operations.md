@@ -8,6 +8,7 @@ Everything is under the data root:
 |---|---|
 | `meta/opens3.db` | Metadata: buckets, object versions, multipart state, users, keys, policies, encryption keys. One file, locked while the server runs. |
 | `meta/master.keys` | The master key ring. Mode 0600. |
+| `tls/tls.crt`, `tls/tls.key` | The self-signed certificate and key, when `--tls self-signed` is used. Delete the directory to generate a new certificate. |
 | `data/<bucket>/xx/<id>` | One immutable file per uploaded object or part. |
 | `tmp/` | In-flight uploads; cleaned at start. |
 

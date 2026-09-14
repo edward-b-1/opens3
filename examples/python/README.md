@@ -19,7 +19,7 @@ uv run upload_data.py --generate
 | key                    | default                 |
 |------------------------|-------------------------|
 | `OPENS3_ENDPOINT`      | `http://localhost:9000` |
-| `OPENS3_TLS_VERIFY`    | `true` (system CA store) or a path to a PEM CA bundle / server cert; cannot be disabled |
+| `OPENS3_TLS_VERIFY`    | `true` (system CA store) or a path to a PEM CA bundle / server cert (with `--tls self-signed`, `<root>/tls/tls.crt`); cannot be disabled |
 | `OPENS3_ACCESS_KEY`    | `root`                  |
 | `OPENS3_SECRET_KEY`    | `password`              |
 | `OPENS3_REGION`        | `us-east-1`             |

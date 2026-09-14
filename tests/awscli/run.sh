@@ -130,8 +130,6 @@ set -e
 # schemes, appending to the same results file.
 TLS_DIR="$RESULTS/tls"
 mkdir -p "$TLS_DIR"
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 -subj "/CN=localhost" \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout "$TLS_DIR/tls.key" -out "$TLS_DIR/tls.crt" 2>/dev/null
 TLS_PORT=""
 for _ in $(seq 1 50); do
   p=$((20000 + RANDOM % 20000))
@@ -139,15 +137,18 @@ for _ in $(seq 1 50); do
   if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then TLS_PORT=$p; break; fi
 done
 TLS_DATA="$(mktemp -d "${TMPDIR:-/tmp}/opens3-awscli-tls.XXXXXX")"
-# OPENS3_HSTS=1: the test certificate is self-signed, which turns HSTS off by default.
-OPENS3_TLS_CERT="$TLS_DIR/tls.crt" OPENS3_TLS_KEY="$TLS_DIR/tls.key" OPENS3_HSTS=1 \
-  "$BIN" server --root "$TLS_DATA/data" --address "127.0.0.1:$TLS_PORT" --no-fsync --log-level "${AWSCLI_LOG_LEVEL:-warn}" >"$RESULTS/server-tls.log" 2>&1 &
+# The server generates its own certificate (`--tls self-signed`); the CLI
+# trusts the file it writes. OPENS3_HSTS=1: a self-signed certificate turns
+# HSTS off by default, and the browser scenarios expect the header.
+OPENS3_HSTS=1 \
+  "$BIN" server --root "$TLS_DATA/data" --address "127.0.0.1:$TLS_PORT" --tls self-signed --no-fsync --log-level "${AWSCLI_LOG_LEVEL:-warn}" >"$RESULTS/server-tls.log" 2>&1 &
 TLS_PID=$!
 for _ in $(seq 1 100); do
-  if curl -fs --cacert "$TLS_DIR/tls.crt" "https://127.0.0.1:$TLS_PORT/opens3/health/ready" >/dev/null 2>&1; then break; fi
+  if [ -s "$TLS_DATA/data/tls/tls.crt" ] && curl -fs --cacert "$TLS_DATA/data/tls/tls.crt" "https://127.0.0.1:$TLS_PORT/opens3/health/ready" >/dev/null 2>&1; then break; fi
   kill -0 "$TLS_PID" 2>/dev/null || { log "tls server exited early:"; cat "$RESULTS/server-tls.log" >&2; exit 1; }
   sleep 0.1
 done
+cp "$TLS_DATA/data/tls/tls.crt" "$TLS_DIR/tls.crt"
 log "tls server listening on 127.0.0.1:$TLS_PORT"
 set +e
 if [ "$MODE" = native ]; then

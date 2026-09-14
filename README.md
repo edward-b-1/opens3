@@ -69,8 +69,10 @@ The console is at http://localhost:9000/console/, health at
 random master key is generated into `<root>/meta/master.keys` on first
 start: back it up, or supply your own with `OPENS3_MASTER_KEY`; rotate
 it with `opens3 master rotate` (`docs/MANUAL.md`, chapter 8). For
-TLS set `OPENS3_TLS_CERT` and `OPENS3_TLS_KEY`; plain-HTTP requests to the
-same port are then redirected to https.
+TLS add `--tls self-signed` (the server generates and keeps a certificate
+under the data root and logs its fingerprint) or set `OPENS3_TLS_CERT` and
+`OPENS3_TLS_KEY`; plain-HTTP requests to the same port are then redirected
+to https.
 Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 
 ## Documentation

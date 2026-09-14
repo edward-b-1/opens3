@@ -11,7 +11,8 @@ There is no configuration file. Settings come from command-line flags and
 | `--address ADDR` | `:9000` | Listen address (`host:port`). |
 | `--region NAME` | `us-east-1` | Region reported to clients (`GetBucketLocation`, bucket records). |
 | `--enforce-region` | off | Reject signatures whose credential scope names another region. Off means any region is accepted, as most S3-compatible servers do. |
-| `--tls-cert FILE`, `--tls-key FILE` | | Serve HTTPS (see below). |
+| `--tls self-signed` | | Serve HTTPS with a certificate the server generates and keeps under the data root (see below). |
+| `--tls-cert FILE`, `--tls-key FILE` | | Serve HTTPS with your own certificate (see below). |
 | `--no-fsync` | off | Skip fsync on writes. Only for benchmarks and tests: a crash can lose acknowledged data. |
 | `--log-level LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `--log-json` | off | Structured JSON log lines instead of text. |
@@ -24,7 +25,7 @@ There is no configuration file. Settings come from command-line flags and
 | `OPENS3_MASTER_KEY` | Optional master key material, at least 32 characters of random data (`openssl rand -base64 32`). When set, the key file is not used. See chapter 5. |
 | `OPENS3_MASTER_KEY_NEW`, `OPENS3_MASTER_KEY_OLD` | Read only by `opens3 master` when rotating an environment key (chapter 8). |
 | `OPENS3_ROOT`, `OPENS3_ADDRESS`, `OPENS3_REGION` | Same as the flags. |
-| `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
+| `OPENS3_TLS`, `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
 | `OPENS3_HSTS`, `OPENS3_NO_HSTS` | `Strict-Transport-Security` is sent over TLS only when the certificate is not self-signed; `OPENS3_HSTS=1` forces it on, `OPENS3_NO_HSTS=1` forces it off. |
 | `OPENS3_DOMAINS` | Comma-separated domains for virtual-host addressing: a request to `mybucket.s3.example.com` selects `mybucket`. |
 | `OPENS3_ACCOUNT_ID` | The 12-digit account ID in ARNs (`arn:aws:iam::<id>:user/alice`). Default `000000000000`. |
@@ -35,13 +36,43 @@ There is no configuration file. Settings come from command-line flags and
 
 ## TLS
 
-Provide a certificate and key in PEM format:
+The quickest way to encrypted transport is a certificate the server makes
+for itself:
+
+```sh
+opens3 server --root /var/lib/opens3 --tls self-signed
+```
+
+On first start this generates an ECDSA key and a self-signed certificate
+under `<root>/tls/` (`tls.crt` world-readable, `tls.key` owner-only) and
+logs the certificate's SHA-256 fingerprint. Later starts reuse the pair,
+so the fingerprint stays the same until the certificate expires (825
+days), when the next start replaces it and logs that it did. The
+certificate covers `localhost`, the machine's host name, its addresses,
+the host in `--address`, and every `OPENS3_DOMAINS` entry with its bucket
+wildcard. If the server later answers to a name the certificate lacks
+(a new domain, a new address), the log says which; delete `<root>/tls/`
+and restart to generate a certificate that covers it.
+
+Clients trust the file, or pin the fingerprint:
+
+```sh
+aws --ca-bundle /var/lib/opens3/tls/tls.crt --endpoint-url https://s3.internal:9000 s3 ls
+curl --cacert /var/lib/opens3/tls/tls.crt https://s3.internal:9000/opens3/health/ready
+```
+
+boto3 takes `verify="/path/to/tls.crt"`. Browsers show a warning for the
+console until the certificate is imported into the operating system's
+trust store; the fingerprint in the log is what to compare against the
+one the browser shows.
+
+To use your own certificate instead, provide the pair in PEM format:
 
 ```sh
 export OPENS3_TLS_CERT=/etc/opens3/tls.crt OPENS3_TLS_KEY=/etc/opens3/tls.key
 ```
 
-With TLS on:
+Either way, with TLS on:
 
 - the listener requires TLS 1.2 or later and prefers TLS 1.3;
 - a plain-HTTP request to the same port gets a clear answer instead of a
@@ -58,23 +89,13 @@ With TLS on:
   on and `OPENS3_NO_HSTS=1` forces it off;
 - console cookies are marked Secure.
 
-For an internal deployment a self-signed certificate is enough. Include
-every name and address clients will use as subject alternative names:
-
-```sh
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-  -days 3650 -subj "/CN=s3.internal" \
-  -addext "subjectAltName=DNS:s3.internal,DNS:*.s3.internal,IP:10.0.0.5" \
-  -keyout tls.key -out tls.crt
-chmod 600 tls.key
-```
-
-Clients then need to trust it: import `tls.crt` into the operating system
-trust store, or pass it explicitly (`aws --ca-bundle tls.crt`, boto3
-`verify="tls.crt"`, `curl --cacert tls.crt`). For a public host name use a
-certificate from a public authority (Let's Encrypt or your own CA). This
-version does not obtain or renew certificates itself; a reverse proxy that
-does is a common arrangement.
+For a public host name use a certificate from a public authority (Let's
+Encrypt or your own CA) with `--tls-cert`/`--tls-key`. This version does
+not obtain or renew public certificates itself; a reverse proxy that does
+is a common arrangement. If you make your own certificate with openssl
+rather than `--tls self-signed`, include every name and address clients
+will use as subject alternative names, and the bucket wildcard when you
+use virtual-host addressing.
 
 ## Virtual-host addressing
 
