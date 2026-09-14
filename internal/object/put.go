@@ -433,10 +433,16 @@ func (s *Service) PutObject(ctx context.Context, actor Actor, in PutInput) (*met
 		o.SSE = enc.info
 	}
 	var replaced *meta.Object
+	if s.testBeforeCommit != nil {
+		s.testBeforeCommit()
+	}
 	err = s.kv.Update(func(tx kv.Txn) error {
-		// Re-read the bucket inside the transaction: versioning may have changed.
+		// Re-read the bucket inside the transaction: versioning may have
+		// changed, and it must still be the bucket the request was
+		// authorised against (not deleted and recreated meanwhile).
+		seen := b
 		b, err := meta.GetBucket(tx, in.Bucket)
-		if errors.Is(err, kv.ErrNotFound) {
+		if errors.Is(err, kv.ErrNotFound) || (err == nil && !sameBucket(b, seen)) {
 			return s3err.New(s3err.NoSuchBucket)
 		} else if err != nil {
 			return err

@@ -14,13 +14,17 @@ func keyStatus(k *iam.Key) string {
 }
 
 func (h *Handler) createAccessKey(req *Request) (any, error) {
-	name, self := h.callerOrParam(req)
-	if !self || req.Identity.IsRoot {
-		if err := h.authorize(req, iam.ActionCreateAccessKey); err != nil {
-			return nil, err
-		}
+	name, _ := h.callerOrParam(req)
+	// Creating a key needs the permission even for oneself, and credentials
+	// under a session policy may not create keys at all: the new key would
+	// carry none of the restriction.
+	if err := h.authorize(req, iam.ActionCreateAccessKey); err != nil {
+		return nil, err
 	}
-	if name == req.Identity.Name() && req.Identity.IsRoot {
+	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
+		return nil, errAccessDeniedMsg(err.Error())
+	}
+	if name == "root" {
 		return nil, errInvalidInput("root cannot own access keys; its credentials come from the server configuration. Create a user instead.")
 	}
 	if _, err := h.IAM.GetUser(name); err != nil {

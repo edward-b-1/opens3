@@ -175,6 +175,11 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	obj := object.New(db, bs, k, cfg.Region, cfg.Log)
+	if n, err := obj.FinishDeletes(context.Background()); err != nil {
+		return nil, fmt.Errorf("finishing interrupted bucket deletions: %w", err)
+	} else if n > 0 {
+		cfg.Log.Info("finished interrupted bucket deletions", "buckets", n)
+	}
 	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID(), DefaultOwnership: cfg.DefaultOwnership}, cfg.Log)
 	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry(), Ext: map[string]any{}}
 	s.mx = newMetrics(s.reg)

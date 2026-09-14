@@ -110,10 +110,14 @@ func (s *Server) uploadPartCopy(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
-	srcReq := iamRequest{Identity: c.identity, Action: "s3:GetObject", Bucket: sb, Key: sk, Conditions: s.conditionContext(c),
+	srcAction := "s3:GetObject"
+	if sv != "" {
+		srcAction = "s3:GetObjectVersion"
+	}
+	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContext(c),
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
 	if so, err := s.obj.StatObject(r.Context(), sb, sk, sv); err == nil {
-		srcReq.ObjectOwner, srcReq.ObjectACL = so.Owner, so.ACL
+		applyObjectContext(&srcReq, so)
 	}
 	if !s.iam.Authorize(srcReq) {
 		return errAccessDenied()

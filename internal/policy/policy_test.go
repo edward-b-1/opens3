@@ -148,3 +148,62 @@ func TestSubstituteVars(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestNegatedOperatorsMatchWhenKeyAbsent(t *testing.T) {
+	// "Deny unless the encryption header is AES256" must fire when the
+	// header is missing altogether (AWS semantics for negated operators).
+	d, err := Parse([]byte(`{"Statement":[{"Effect":"Deny","Action":"s3:PutObject","Resource":"*",
+		"Condition":{"StringNotEquals":{"s3:x-amz-server-side-encryption":"AES256"}}}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Evaluate(Args{Action: "s3:PutObject", Resource: "x", Conditions: map[string][]string{}}) != Denied {
+		t.Fatal("missing key must match StringNotEquals")
+	}
+	if d.Evaluate(Args{Action: "s3:PutObject", Resource: "x", Conditions: map[string][]string{"s3:x-amz-server-side-encryption": {"AES256"}}}) != NoMatch {
+		t.Fatal("matching value must not be denied")
+	}
+	if d.Evaluate(Args{Action: "s3:PutObject", Resource: "x", Conditions: map[string][]string{"s3:x-amz-server-side-encryption": {"aws:kms"}}}) != Denied {
+		t.Fatal("other value must be denied")
+	}
+	// Positive operators still need the key; NotIpAddress and ArnNotLike
+	// behave like StringNotEquals.
+	for _, tc := range []struct {
+		cond string
+		want Decision
+	}{
+		{`{"StringEquals":{"aws:sourceip":"10.0.0.1"}}`, NoMatch},
+		{`{"NotIpAddress":{"aws:sourceip":"10.0.0.0/8"}}`, Allowed},
+		{`{"ArnNotLike":{"aws:principalarn":"arn:aws:iam::*:user/admin"}}`, Allowed},
+		{`{"Bool":{"aws:securetransport":"false"}}`, NoMatch},
+		{`{"ForAnyValue:StringNotEquals":{"aws:tagkeys":"x"}}`, NoMatch},
+	} {
+		d, err := Parse([]byte(`{"Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*","Condition":` + tc.cond + `}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := d.Evaluate(Args{Action: "s3:GetObject", Resource: "x", Conditions: map[string][]string{}}); got != tc.want {
+			t.Errorf("%s with key absent: %v, want %v", tc.cond, got, tc.want)
+		}
+	}
+}
+
+func TestResourceARNKeepsKeyVerbatim(t *testing.T) {
+	for key, want := range map[string]string{
+		"a/b": "arn:aws:s3:::b/a/b", "private/../public/x": "arn:aws:s3:::b/private/../public/x",
+		"dir/": "arn:aws:s3:::b/dir/", "a//b": "arn:aws:s3:::b/a//b", "./x": "arn:aws:s3:::b/./x",
+	} {
+		if got := ResourceARN("b", key); got != want {
+			t.Errorf("ResourceARN(%q) = %q, want %q", key, got, want)
+		}
+	}
+	if ResourceARN("b", "") != "arn:aws:s3:::b" {
+		t.Fatal("bucket ARN")
+	}
+	// A prefix policy on public/* must not cover a key that only
+	// normalises to public/.
+	d, _ := Parse([]byte(`{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::b/public/*"}]}`))
+	if d.Evaluate(Args{Action: "s3:GetObject", Resource: ResourceARN("b", "private/../public/x")}) != NoMatch {
+		t.Fatal("dot-dot key authorised as public")
+	}
+}

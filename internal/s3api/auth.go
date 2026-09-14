@@ -66,6 +66,9 @@ func (s *Server) authenticate(c *reqCtx) error {
 	if err != nil {
 		return mapSigErr(err)
 	}
+	if err := checkUnsignedAmzHeaders(r, p.SignedHeaders); err != nil {
+		return err
+	}
 	id, err := s.iam.Resolve(p.AccessKey, p.SessionToken)
 	if err != nil {
 		return mapSigErr(err)
@@ -208,11 +211,12 @@ func (s *Server) authorize(c *reqCtx) error {
 		req.SelfLockConfirmed = c.bkt.SelfLock
 	}
 	if c.objMeta != nil {
-		req.ObjectOwner = c.objMeta.Owner
-		req.ObjectACL = c.objMeta.ACL
-		for _, t := range c.objMeta.Tags {
-			req.Conditions["s3:existingobjecttag/"+strings.ToLower(t.Key)] = []string{t.Value}
-		}
+		applyObjectContext(&req, c.objMeta)
+	}
+	if op.name == "DeleteObjects" {
+		// No bucket-level permission exists for batch delete on AWS: each
+		// key is authorised as s3:DeleteObject(Version) by the handler.
+		return nil
 	}
 	if op.name == "ListBuckets" {
 		// Every authenticated identity may call ListBuckets; results are
@@ -485,4 +489,62 @@ func parseTaggingHeader(v string) []meta.Tag {
 		out = append(out, meta.Tag{Key: k, Value: val})
 	}
 	return out
+}
+
+// amzHeadersNotNeedingSignature are x-amz-* headers whose value is already
+// bound to the signature another way (the date and payload hash are part
+// of the string to sign, the token is verified against the key) or that
+// change nothing about the request.
+var amzHeadersNotNeedingSignature = map[string]bool{
+	"x-amz-date": true, "x-amz-content-sha256": true, "x-amz-security-token": true, "x-amz-user-agent": true,
+}
+
+// checkUnsignedAmzHeaders rejects a signed request that carries x-amz-*
+// headers outside its SignedHeaders. Such headers change what a request
+// does (x-amz-copy-source turns a PUT into a copy; ACL, tagging, lock and
+// encryption headers set attributes), so a holder of a presigned URL or a
+// captured signed request must not be able to add them. AWS applies the
+// same rule and returns AccessDenied.
+func checkUnsignedAmzHeaders(r *http.Request, signed []string) error {
+	ok := make(map[string]bool, len(signed))
+	for _, h := range signed {
+		ok[strings.ToLower(h)] = true
+	}
+	for name := range r.Header {
+		n := strings.ToLower(name)
+		if strings.HasPrefix(n, "x-amz-") && !ok[n] && !amzHeadersNotNeedingSignature[n] {
+			return s3err.New(s3err.AccessDenied).WithMessage("There were headers present in the request which were not signed")
+		}
+	}
+	return nil
+}
+
+// applyObjectContext adds an object's owner, ACL and tags to an
+// authorisation request (the s3:ExistingObjectTag condition keys).
+func applyObjectContext(req *iamRequest, o *meta.Object) {
+	req.ObjectOwner = o.Owner
+	req.ObjectACL = o.ACL
+	for _, t := range o.Tags {
+		req.Conditions["s3:existingobjecttag/"+strings.ToLower(t.Key)] = []string{t.Value}
+	}
+}
+
+// reauthorizeServed re-runs authorisation when the object a handler is
+// about to return is not the version that was authorised (it was replaced
+// between the two lookups), so a request checked against a public object
+// cannot receive a private replacement.
+func (s *Server) reauthorizeServed(c *reqCtx, o *meta.Object) error {
+	if o == nil || c.op == nil || c.op.action == "" {
+		return nil
+	}
+	if c.objMeta != nil && c.objMeta.VersionID == o.VersionID && c.objMeta.Seq == o.Seq {
+		return nil
+	}
+	req := s.authzRequest(c, c.op.action)
+	applyObjectContext(&req, o)
+	if !s.iam.Authorize(req) {
+		return errAccessDenied()
+	}
+	c.objMeta = o
+	return nil
 }

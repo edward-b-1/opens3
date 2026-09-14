@@ -70,7 +70,11 @@ type Bucket struct {
 	Owner        string    `json:"o"`
 	OwnerDisplay string    `json:"od,omitempty"`
 	Created      time.Time `json:"c"`
-	Region       string    `json:"r,omitempty"`
+	// Deleting marks a bucket whose record is kept while its data
+	// directory is being removed: it is invisible to every operation, and
+	// the name cannot be recreated until the removal has finished.
+	Deleting bool   `json:"del,omitempty"`
+	Region   string `json:"r,omitempty"`
 
 	Versioning        string             `json:"v,omitempty"` // "" | Enabled | Suspended
 	MFADelete         bool               `json:"mfa,omitempty"`

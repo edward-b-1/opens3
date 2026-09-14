@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -493,5 +494,68 @@ func TestEvents(t *testing.T) {
 	s.DeleteObject(ctx, actor, DeleteInput{Bucket: "evt", Key: "k"})
 	if len(names) != 2 || names[0] != "s3:ObjectCreated:Put" || names[1] != "s3:ObjectRemoved:Delete" {
 		t.Fatalf("events: %v", names)
+	}
+}
+
+func TestBucketDeleteIsTwoPhase(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	actor := Actor{CanonicalID: "me"}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "gone"}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash after phase one: the record is marked deleting.
+	if err := s.kv.Update(func(tx kv.Txn) error {
+		b, _ := meta.GetBucket(tx, "gone")
+		b.Deleting = true
+		return meta.PutBucket(tx, b)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetBucket(ctx, "gone"); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("deleting bucket visible: %v", err)
+	}
+	if bs, _ := s.ListBuckets(ctx); len(bs) != 0 {
+		t.Fatalf("deleting bucket listed: %v", bs)
+	}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "gone"}); code(err) != s3err.OperationAborted {
+		t.Fatalf("recreate during deletion: %v", err)
+	}
+	if _, err := s.PutObject(ctx, actor, PutInput{Bucket: "gone", Key: "k", Body: strings.NewReader("x"), Size: 1}); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("put into deleting bucket: %v", err)
+	}
+	if n, err := s.FinishDeletes(ctx); err != nil || n != 1 {
+		t.Fatalf("finish deletes: %d %v", n, err)
+	}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "gone"}); err != nil {
+		t.Fatalf("recreate after deletion: %v", err)
+	}
+
+	// A write authorised against one incarnation of a bucket must not land
+	// in a bucket of the same name created afterwards.
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "recreated"}); err != nil {
+		t.Fatal(err)
+	}
+	s.testBeforeCommit = func() {
+		s.testBeforeCommit = nil
+		if err := s.DeleteBucket(ctx, "recreated"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "recreated"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.PutObject(ctx, actor, PutInput{Bucket: "recreated", Key: "late", Body: strings.NewReader("late"), Size: 4}); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("write into a recreated bucket: %v", err)
+	}
+	if _, err := s.StatObject(ctx, "recreated", "late", ""); code(err) != s3err.NoSuchKey {
+		t.Fatalf("late write landed in the new bucket: %v", err)
+	}
+	// The ordinary path still works end to end and leaves no record.
+	if err := s.DeleteBucket(ctx, "recreated"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "recreated"}); err != nil {
+		t.Fatalf("recreate after a clean delete: %v", err)
 	}
 }

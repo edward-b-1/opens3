@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -436,6 +435,13 @@ func splitOperator(op string) (base string, set string, ifExists bool, ok bool) 
 	return "", "", false, false
 }
 
+// negatedOperators evaluate true when the condition key is absent.
+var negatedOperators = map[string]bool{
+	"StringNotEquals": true, "StringNotEqualsIgnoreCase": true, "StringNotLike": true,
+	"NumericNotEquals": true, "DateNotEquals": true, "NotIpAddress": true,
+	"ArnNotEquals": true, "ArnNotLike": true,
+}
+
 func evalCondition(op string, keys map[string][]string, a Args) bool {
 	base, set, ifExists, _ := splitOperator(op)
 	for key, want := range keys {
@@ -453,7 +459,11 @@ func evalCondition(op string, keys map[string][]string, a Args) bool {
 			continue
 		}
 		if !present || len(have) == 0 {
-			if ifExists || set == "ForAllValues" {
+			// An absent key matches a negated operator (AWS: "StringNotEquals"
+			// on a request without the key evaluates true), so a deny written
+			// as "unless the header equals X" fires when the header is
+			// missing. Positive operators need the key.
+			if ifExists || set == "ForAllValues" || (set == "" && negatedOperators[base]) {
 				continue
 			}
 			return false
@@ -689,5 +699,8 @@ func ResourceARN(bucket, key string) string {
 	if key == "" {
 		return "arn:aws:s3:::" + bucket
 	}
-	return "arn:aws:s3:::" + path.Join(bucket, key)
+	// The key is used verbatim: S3 keys are opaque, and normalising "..",
+	// "." or repeated slashes here would let an object stored under one
+	// name be authorised under another.
+	return "arn:aws:s3:::" + bucket + "/" + key
 }

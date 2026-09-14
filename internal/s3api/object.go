@@ -133,6 +133,12 @@ func (s *Server) serveObject(c *reqCtx, head bool) error {
 		}
 	}
 	res, err := s.obj.GetObject(r.Context(), in)
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, res.Object); aerr != nil {
+			res.Body.Close()
+			return aerr
+		}
+	}
 	if err != nil {
 		var e *s3err.Error
 		if errors.As(err, &e) && e.Code == s3err.NoSuchKey && e.Headers["x-amz-delete-marker"] == "" {
@@ -316,7 +322,7 @@ func (s *Server) copyObject(c *reqCtx) error {
 	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContext(c),
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
 	if so, err := s.obj.StatObject(r.Context(), sb, sk, sv); err == nil {
-		srcReq.ObjectOwner, srcReq.ObjectACL = so.Owner, so.ACL
+		applyObjectContext(&srcReq, so)
 	}
 	if !s.iam.Authorize(srcReq) {
 		return errAccessDenied()
@@ -392,6 +398,11 @@ func (s *Server) objectVersionID(c *reqCtx) string { return c.r.URL.Query().Get(
 
 func (s *Server) getObjectTagging(c *reqCtx) error {
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -436,6 +447,11 @@ func (s *Server) deleteObjectTagging(c *reqCtx) error {
 
 func (s *Server) getObjectACL(c *reqCtx) error {
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -469,6 +485,11 @@ func (s *Server) putObjectACL(c *reqCtx) error {
 		return err
 	}
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -499,6 +520,11 @@ func (s *Server) getObjectRetention(c *reqCtx) error {
 		return s3err.New(s3err.InvalidRequest).WithMessage("Bucket is missing Object Lock Configuration")
 	}
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -540,6 +566,11 @@ func (s *Server) getObjectLegalHold(c *reqCtx) error {
 		return s3err.New(s3err.InvalidRequest).WithMessage("Bucket is missing Object Lock Configuration")
 	}
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -586,6 +617,11 @@ func (s *Server) getObjectAttributes(c *reqCtx) error {
 		return err
 	}
 	o, err := s.obj.StatObject(r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -692,6 +728,11 @@ func (s *Server) restoreObject(c *reqCtx) error {
 		return errNotImplemented("Restore with Type=SELECT is not supported")
 	}
 	o, err := s.obj.StatObject(c.r.Context(), c.bucket, c.key, s.objectVersionID(c))
+	if err == nil {
+		if aerr := s.reauthorizeServed(c, o); aerr != nil {
+			return aerr
+		}
+	}
 	if err != nil {
 		return err
 	}

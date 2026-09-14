@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -44,10 +45,14 @@ type Key struct {
 	Kind          string          `json:"k"`
 	Enabled       bool            `json:"e"`
 	SessionPolicy json.RawMessage `json:"sp,omitempty"` // service accounts / STS: intersected with user's policies
-	SessionToken  string          `json:"st,omitempty"` // STS only
-	Expires       *time.Time      `json:"x,omitempty"`  // STS only
-	Description   string          `json:"d,omitempty"`
-	Created       time.Time       `json:"c"`
+	// ParentPolicies are the session policies of the credentials this key
+	// was derived from (STS chaining): every one of them must allow too,
+	// so a derived session can only narrow, never widen.
+	ParentPolicies []json.RawMessage `json:"pp,omitempty"`
+	SessionToken   string            `json:"st,omitempty"` // STS only
+	Expires        *time.Time        `json:"x,omitempty"`  // STS only
+	Description    string            `json:"d,omitempty"`
+	Created        time.Time         `json:"c"`
 }
 
 // Group is a named set of users with attached policies.
@@ -78,7 +83,31 @@ type Identity struct {
 	// Effective identity policies (documents) and session policy.
 	Policies      []json.RawMessage
 	SessionPolicy json.RawMessage
-	AccountID     string
+	// ParentPolicies are inherited session restrictions (see Key).
+	ParentPolicies []json.RawMessage
+	AccountID      string
+}
+
+// Restricted reports whether the caller's credentials carry a session
+// policy (a service account with one, or an STS session created with or
+// derived under one). Such credentials are narrower than their user and
+// must not be able to mint credentials that are not.
+func (id *Identity) Restricted() bool {
+	return id != nil && !id.IsRoot && (len(id.SessionPolicy) > 0 || len(id.ParentPolicies) > 0)
+}
+
+// ErrRestricted is returned when restricted credentials try to create or
+// change credentials.
+var ErrRestricted = errors.New("iam: credentials restricted by a session policy cannot create or change credentials")
+
+// CheckCredentialIssuer refuses restricted credentials as the creator of
+// access keys or console passwords: the result would carry none of the
+// caller's restrictions.
+func CheckCredentialIssuer(id *Identity) error {
+	if id.Restricted() {
+		return ErrRestricted
+	}
+	return nil
 }
 
 // Name returns the user name ("root" for the root account).

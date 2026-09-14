@@ -213,7 +213,7 @@ func (s *Store) Resolve(accessKey, sessionToken string) (*Identity, error) {
 		if !u.Enabled {
 			return ErrDisabled
 		}
-		id = &Identity{User: u, Key: k, AccountID: s.cfg.AccountID, SessionPolicy: k.SessionPolicy}
+		id = &Identity{User: u, Key: k, AccountID: s.cfg.AccountID, SessionPolicy: k.SessionPolicy, ParentPolicies: k.ParentPolicies}
 		id.Policies, err = s.effectivePolicies(tx, u)
 		return err
 	})
@@ -361,7 +361,8 @@ func validName(n string) bool {
 // (MinIO convention) and the given secret. Pass secret "" to create the
 // user with no key.
 func (s *Store) CreateUser(name, secret string, policies []string) error {
-	if !validName(name) || name == s.cfg.RootAccessKey {
+	if !validName(name) || name == s.cfg.RootAccessKey || name == "root" {
+		// "root" is the synthetic user behind root's STS sessions.
 		return fmt.Errorf("%w: invalid user name", ErrInvalid)
 	}
 	if secret != "" && len(secret) < 8 {
@@ -566,6 +567,12 @@ func (s *Store) CreateKey(user, accessKey, secret, kind string, sessionPolicy js
 	if kind != KindUser && kind != KindService {
 		return nil, "", fmt.Errorf("%w: bad key kind", ErrInvalid)
 	}
+	if user == "root" {
+		// The synthetic user behind root's STS sessions; a permanent key for
+		// it would be a permanent administrative key outside the server
+		// configuration.
+		return nil, "", fmt.Errorf("%w: the root account cannot own access keys", ErrInvalid)
+	}
 	if accessKey == "" {
 		accessKey = GenerateAccessKey()
 	}
@@ -691,13 +698,21 @@ func (s *Store) AssumeRole(id *Identity, sessionPolicy json.RawMessage, duration
 	sk = GenerateSecretKey()
 	token = randomToken(64, "")
 	exp = time.Now().UTC().Add(duration)
-	// Chain session policies: an STS session created from a service
-	// account keeps that account's restriction.
-	if len(sessionPolicy) == 0 && id.Key != nil && len(id.Key.SessionPolicy) > 0 {
-		sessionPolicy = id.Key.SessionPolicy
+	// Chain session policies: a session derived from restricted credentials
+	// keeps every restriction of its parents, and a policy supplied here
+	// can only narrow further.
+	var parents []json.RawMessage
+	if id.Key != nil {
+		parents = append(parents, id.Key.ParentPolicies...)
+		if len(id.Key.SessionPolicy) > 0 {
+			parents = append(parents, id.Key.SessionPolicy)
+		}
+	}
+	if len(sessionPolicy) == 0 && len(parents) > 0 {
+		sessionPolicy, parents = parents[len(parents)-1], parents[:len(parents)-1]
 	}
 	k := &Key{AccessKey: ak, SecretWrapped: s.wrapSecret(sk), User: user, Kind: KindSTS, Enabled: true,
-		SessionPolicy: sessionPolicy, SessionToken: token, Expires: &exp, Created: time.Now().UTC()}
+		SessionPolicy: sessionPolicy, ParentPolicies: parents, SessionToken: token, Expires: &exp, Created: time.Now().UTC()}
 	err = s.kv.Update(func(tx kv.Txn) error {
 		if id.IsRoot {
 			if _, err := getUser(tx, "root"); errors.Is(err, ErrNotFound) {

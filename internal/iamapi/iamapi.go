@@ -64,6 +64,7 @@ func errMalformedPolicy(msg string) *Error {
 func errAccessDenied(action string) *Error {
 	return &Error{http.StatusForbidden, "AccessDenied", "User is not authorized to perform: " + action}
 }
+func errAccessDeniedMsg(msg string) *Error { return &Error{http.StatusForbidden, "AccessDenied", msg} }
 
 // Actions lists the supported IAM actions.
 var actions = map[string]func(*Handler, *Request) (any, error){

@@ -39,7 +39,7 @@ func (s *Service) DeleteObject(ctx context.Context, actor Actor, in DeleteInput)
 	var eventObj *meta.Object
 	eventName := "s3:ObjectRemoved:Delete"
 	err := s.kv.Update(func(tx kv.Txn) error {
-		b, err := meta.GetBucket(tx, in.Bucket)
+		b, err := getLiveBucket(tx, in.Bucket)
 		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(in.Bucket)
 		} else if err != nil {

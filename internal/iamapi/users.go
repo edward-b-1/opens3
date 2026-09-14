@@ -159,6 +159,9 @@ func (h *Handler) createLoginProfile(req *Request) (any, error) {
 	if err := h.authorize(req, iam.ActionCreateLoginProfile); err != nil {
 		return nil, err
 	}
+	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
+		return nil, errAccessDeniedMsg(err.Error())
+	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
 		return nil, err
@@ -186,6 +189,9 @@ func (h *Handler) createLoginProfile(req *Request) (any, error) {
 func (h *Handler) updateLoginProfile(req *Request) (any, error) {
 	if err := h.authorize(req, iam.ActionUpdateLoginProfile); err != nil {
 		return nil, err
+	}
+	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
+		return nil, errAccessDeniedMsg(err.Error())
 	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
@@ -238,6 +244,9 @@ func (h *Handler) getLoginProfile(req *Request) (any, error) {
 func (h *Handler) changePassword(req *Request) (any, error) {
 	if req.Identity.IsRoot {
 		return nil, errInvalidInput("The root password comes from the server configuration")
+	}
+	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
+		return nil, errAccessDeniedMsg(err.Error())
 	}
 	old, err := requireParam(req, "OldPassword")
 	if err != nil {

@@ -98,18 +98,17 @@ func (s *Store) Authorize(r Request) bool {
 				ip = policy.Allowed
 			}
 		}
-		if len(id.SessionPolicy) > 0 {
-			doc, err := s.ParsedPolicy(id.SessionPolicy)
+		// Session policies are filters: each one (the credential's own and
+		// every inherited one) must allow, or nothing grants.
+		for _, raw := range append([]json.RawMessage{id.SessionPolicy}, id.ParentPolicies...) {
+			if len(raw) == 0 {
+				continue
+			}
+			doc, err := s.ParsedPolicy(raw)
 			if err != nil {
 				return false
 			}
-			sp := doc.Evaluate(args)
-			if sp == policy.Denied {
-				return false
-			}
-			// A session policy is a filter: without its allow, identity
-			// policies and bucket policies cannot grant.
-			if sp != policy.Allowed {
+			if doc.Evaluate(args) != policy.Allowed {
 				return false
 			}
 		}

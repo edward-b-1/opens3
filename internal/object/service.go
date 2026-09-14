@@ -60,6 +60,9 @@ type Service struct {
 	region string
 	// Notify, if set, receives events after each successful mutation.
 	Notify func(Event)
+	// testBeforeCommit, when set by a test, runs between an operation's
+	// authorisation-time bucket read and its write transaction.
+	testBeforeCommit func()
 }
 
 // New creates a service.
@@ -160,6 +163,10 @@ func (s *Service) CreateBucket(ctx context.Context, actor Actor, in CreateBucket
 	err := s.kv.Update(func(tx kv.Txn) error {
 		if err := meta.CreateBucket(tx, b); errors.Is(err, meta.ErrExists) {
 			old, _ := meta.GetBucket(tx, in.Name)
+			if old != nil && old.Deleting {
+				// The previous bucket of this name is still being removed.
+				return s3err.New(s3err.OperationAborted)
+			}
 			if old != nil && old.Owner == actor.CanonicalID {
 				return s3err.New(s3err.BucketAlreadyOwnedByYou)
 			}
@@ -180,13 +187,34 @@ func (s *Service) GetBucket(ctx context.Context, name string) (*meta.Bucket, err
 	var b *meta.Bucket
 	err := s.kv.View(func(tx kv.Txn) error {
 		var err error
-		b, err = meta.GetBucket(tx, name)
+		b, err = getLiveBucket(tx, name)
 		return err
 	})
 	if errors.Is(err, kv.ErrNotFound) {
 		return nil, s3err.New(s3err.NoSuchBucket).WithResource(name)
 	}
 	return b, err
+}
+
+// getLiveBucket is meta.GetBucket that treats a bucket being deleted as
+// absent.
+func getLiveBucket(tx kv.Txn, name string) (*meta.Bucket, error) {
+	b, err := meta.GetBucket(tx, name)
+	if err != nil {
+		return nil, err
+	}
+	if b.Deleting {
+		return nil, kv.ErrNotFound
+	}
+	return b, nil
+}
+
+// sameBucket reports whether cur is the same incarnation of the bucket
+// that was read (and authorised) earlier: a bucket deleted and recreated
+// under the same name has a different creation time, and writes
+// authorised against the old one must not land in the new one.
+func sameBucket(cur, seen *meta.Bucket) bool {
+	return cur != nil && seen != nil && !cur.Deleting && cur.Created.Equal(seen.Created)
 }
 
 // UpdateBucket applies fn to the bucket record atomically.
@@ -212,17 +240,28 @@ func (s *Service) UpdateBucket(ctx context.Context, name string, fn func(b *meta
 func (s *Service) ListBuckets(ctx context.Context) ([]*meta.Bucket, error) {
 	var out []*meta.Bucket
 	err := s.kv.View(func(tx kv.Txn) error {
-		var err error
-		out, err = meta.ListBuckets(tx)
-		return err
+		all, err := meta.ListBuckets(tx)
+		if err != nil {
+			return err
+		}
+		for _, b := range all {
+			if !b.Deleting {
+				out = append(out, b)
+			}
+		}
+		return nil
 	})
 	return out, err
 }
 
-// DeleteBucket removes an empty bucket.
+// DeleteBucket removes an empty bucket. The record is first marked as
+// deleting (which hides the bucket and blocks recreation of the name),
+// then the data directory is removed, then the record: a bucket created
+// under the same name can never lose files to the removal of the old one.
 func (s *Service) DeleteBucket(ctx context.Context, name string) error {
 	err := s.kv.Update(func(tx kv.Txn) error {
-		if _, err := meta.GetBucket(tx, name); errors.Is(err, kv.ErrNotFound) {
+		b, err := getLiveBucket(tx, name)
+		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(name)
 		} else if err != nil {
 			return err
@@ -250,18 +289,64 @@ func (s *Service) DeleteBucket(ctx context.Context, name string) error {
 				return err
 			}
 		}
-		return meta.DeleteBucket(tx, name)
+		b.Deleting = true
+		return meta.PutBucket(tx, b)
 	})
 	if err != nil {
 		return err
 	}
-	return s.blobs.DeleteBucket(ctx, name)
+	return s.finishDelete(ctx, name)
+}
+
+// finishDelete removes a deleting bucket's data directory and then its
+// record.
+func (s *Service) finishDelete(ctx context.Context, name string) error {
+	if err := s.blobs.DeleteBucket(ctx, name); err != nil {
+		return err
+	}
+	return s.kv.Update(func(tx kv.Txn) error {
+		b, err := meta.GetBucket(tx, name)
+		if errors.Is(err, kv.ErrNotFound) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		if !b.Deleting {
+			return nil // recreated already (should not happen: creation is blocked)
+		}
+		return meta.DeleteBucket(tx, name)
+	})
+}
+
+// FinishDeletes completes bucket removals interrupted by a crash; the
+// server calls it at start.
+func (s *Service) FinishDeletes(ctx context.Context) (int, error) {
+	var names []string
+	err := s.kv.View(func(tx kv.Txn) error {
+		all, err := meta.ListBuckets(tx)
+		for _, b := range all {
+			if b.Deleting {
+				names = append(names, b.Name)
+			}
+		}
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, n := range names {
+		if err := s.finishDelete(ctx, n); err != nil {
+			return 0, err
+		}
+	}
+	return len(names), nil
 }
 
 // DeleteBucketForce removes a bucket and everything in it (admin API).
 func (s *Service) DeleteBucketForce(ctx context.Context, name string) error {
 	err := s.kv.Update(func(tx kv.Txn) error {
-		if _, err := meta.GetBucket(tx, name); errors.Is(err, kv.ErrNotFound) {
+		b, err := getLiveBucket(tx, name)
+		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(name)
 		} else if err != nil {
 			return err
@@ -280,12 +365,13 @@ func (s *Service) DeleteBucketForce(ctx context.Context, name string) error {
 				return err
 			}
 		}
-		return meta.DeleteBucket(tx, name)
+		b.Deleting = true
+		return meta.PutBucket(tx, b)
 	})
 	if err != nil {
 		return err
 	}
-	return s.blobs.DeleteBucket(ctx, name)
+	return s.finishDelete(ctx, name)
 }
 
 // --- helpers -------------------------------------------------------------

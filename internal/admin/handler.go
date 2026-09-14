@@ -401,6 +401,9 @@ func (h *Handler) putUser(c *req) (any, error) {
 	if err := checkNotRoot(name); err != nil {
 		return nil, err
 	}
+	if err := iam.CheckCredentialIssuer(c.id); err != nil {
+		return nil, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: err.Error()}
+	}
 	var in PutUserRequest
 	if err := c.decode(&in); err != nil {
 		return nil, err
@@ -456,6 +459,9 @@ func (h *Handler) setUserPassword(c *req) (any, error) {
 	name := c.path("name")
 	if err := checkNotRoot(name); err != nil {
 		return nil, err
+	}
+	if err := iam.CheckCredentialIssuer(c.id); err != nil {
+		return nil, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: err.Error()}
 	}
 	var in PasswordRequest
 	if err := c.decode(&in); err != nil {
@@ -552,6 +558,9 @@ func (h *Handler) getKey(c *req) (any, error) {
 }
 
 func (h *Handler) createKey(c *req) (any, error) {
+	if err := iam.CheckCredentialIssuer(c.id); err != nil {
+		return nil, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: err.Error()}
+	}
 	var in CreateKeyRequest
 	if err := c.decode(&in); err != nil {
 		return nil, err

@@ -13,6 +13,43 @@ tagged tree.
 
 ## [Unreleased]
 
+### Security
+
+Fixes for findings of a code review of v0.1.0. Upgrade if you run v0.1.0
+with more than one identity.
+
+- Credentials narrowed by a session policy (service accounts with one,
+  STS sessions created with or derived under one) could create a
+  permanent access key or a console password for their user, with none
+  of the restriction. They cannot any more; creating a key for oneself
+  also needs `iam:CreateAccessKey` like any other key. A session derived
+  from a restricted session by AssumeRole now keeps every parent
+  restriction, so it can only narrow. Root's sessions can never own keys.
+- Signed requests carrying `x-amz-*` headers outside their signed
+  headers are refused (`AccessDenied`, as on AWS). Previously a presigned
+  PUT URL could be turned into a server-side copy, or given an ACL or
+  tags, by adding unsigned headers.
+- Negated condition operators (`StringNotEquals`, `NotIpAddress`,
+  `ArnNotLike`, ...) now match when the condition key is absent, as on
+  AWS, so a deny written as "unless the header equals X" fires for
+  requests without the header.
+- Policy resource ARNs use the object key verbatim; `..`, `.` and
+  repeated slashes were normalised before, letting a key be authorised
+  under a name it was not stored under.
+- The object served by GetObject, HeadObject and the object metadata
+  operations is re-authorised when it is not the version that was
+  checked (replaced between the check and the read).
+- Copy sources are authorised with their tags (`s3:ExistingObjectTag`
+  conditions apply); UploadPartCopy of a specific version needs
+  `s3:GetObjectVersion`; DeleteObjects no longer requires a bucket-level
+  `s3:DeleteObject` before its per-key checks, so object-scoped policies
+  work.
+- Bucket deletion marks the record as deleting until the data directory
+  is gone (finished at start after a crash); the name cannot be recreated
+  meanwhile, and an upload authorised against a deleted bucket cannot
+  land in a new bucket of the same name. On-disk: a `del` flag in the
+  bucket record.
+
 ### Changed
 
 - A flag given on the command line now takes precedence over the

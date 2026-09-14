@@ -44,7 +44,7 @@ type GetResult struct {
 func (s *Service) StatObject(ctx context.Context, bucket, key, versionID string) (*meta.Object, error) {
 	var o *meta.Object
 	err := s.kv.View(func(tx kv.Txn) error {
-		if _, err := meta.GetBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err
@@ -259,7 +259,7 @@ func itoa(n int64) string {
 func (s *Service) ListObjects(ctx context.Context, bucket string, opt meta.ListOptions) (*meta.ListResult, error) {
 	var res *meta.ListResult
 	err := s.kv.View(func(tx kv.Txn) error {
-		if _, err := meta.GetBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err
@@ -275,7 +275,7 @@ func (s *Service) ListObjects(ctx context.Context, bucket string, opt meta.ListO
 func (s *Service) ListVersions(ctx context.Context, bucket string, opt meta.ListOptions) (*meta.ListResult, error) {
 	var res *meta.ListResult
 	err := s.kv.View(func(tx kv.Txn) error {
-		if _, err := meta.GetBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err

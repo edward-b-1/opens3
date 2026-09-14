@@ -44,7 +44,7 @@ named `kv`. Keys are byte strings; values are JSON with short field names
 
 | Key | Value |
 |---|---|
-| `b/<bucket>` | Bucket record: owner, region, versioning state, object lock, tags, policy JSON, ACL, default encryption, public access block, ownership, and raw XML of stored configurations (lifecycle, CORS, notification, website, logging, replication, ...). |
+| `b/<bucket>` | Bucket record: owner, region, versioning state, object lock, tags, policy JSON, ACL, default encryption, public access block, ownership, and raw XML of stored configurations (lifecycle, CORS, notification, website, logging, replication, ...). `del: true` marks a bucket whose data directory is being removed: invisible to every operation, name not reusable until the record goes; the server finishes such removals at start. |
 | `o/<bucket>/<key>\0<verkey>` | One object version or delete marker. `verkey` is the 16-hex-digit representation of `^seq` so that the newest version sorts first for a key. `seq` is a nanosecond timestamp made strictly increasing within a process. |
 | `n/<bucket>/<key>` | The `verkey` of the key's `null` version (written while versioning is off or suspended). |
 | `u/<bucket>/<key>\0<uploadId>` | Multipart upload record (attributes to apply on completion, checksum algorithm, wrapped SSE key). |

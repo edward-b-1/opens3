@@ -16,6 +16,12 @@ CLI, the AWS SDKs and policies written for AWS work unchanged.
 | **Policy** | An AWS policy document (JSON). Built-in ones are `readonly`, `readwrite`, `writeonly`, `diagnostics` and `consoleAdmin`. |
 | **Temporary credentials** | Issued by STS `AssumeRole`: a key pair plus a session token, expiring after 15 minutes to 7 days, optionally narrowed by a session policy. Console sessions are these. |
 
+Credentials narrowed by a session policy cannot create access keys or set
+console passwords, for their own user or anyone else, because the result
+would carry none of the restriction. A session derived from such
+credentials with a further `AssumeRole` keeps every restriction of its
+parents and can only narrow them.
+
 A key ID may also be any string of three or more characters chosen by an
 administrator through the admin API or CLI. That exists only to migrate
 MinIO-style credentials, where the user name is the key; the console never
