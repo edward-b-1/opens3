@@ -3,10 +3,8 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -96,8 +94,8 @@ type Server struct {
 	reg  *prometheus.Registry
 	mx   *metrics
 	addr atomic.Value // net.Addr once listening
-	// tlsFingerprint is set when a self-signed certificate is in use.
-	tlsFingerprint string
+	// certs owns the TLS certificate in service (nil when TLS is off).
+	certs *certSource
 	// Registry is the Prometheus registry for subsystem metrics.
 	Registry *prometheus.Registry
 	// Ext holds subsystem state keyed by name (set by extensions).
@@ -234,25 +232,22 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return err
 	}
 	handler := s.Handler()
-	cert, useTLS, err := s.certificate()
-	if err != nil {
-		ln.Close()
-		return err
-	}
+	useTLS := s.cfg.TLSCert != "" || s.cfg.TLS == "self-signed"
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
 	if useTLS {
-		selfSigned := false
-		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
-			selfSigned = bytes.Equal(leaf.RawIssuer, leaf.RawSubject)
+		s.certs = newCertSource(s)
+		if err := s.certs.reload("start"); err != nil {
+			ln.Close()
+			return err
 		}
-		sendHSTS := (s.cfg.HSTS || !selfSigned) && !s.cfg.NoHSTS
-		s.log.Info("tls", "self_signed", selfSigned, "hsts", sendHSTS)
-		if sendHSTS {
-			handler = hsts(handler)
-		}
+		s.log.Info("tls", "self_signed", s.certs.cur.Load().selfSigned, "hsts", s.certs.sendHSTS())
+		handler = hstsIf(handler, s.certs.sendHSTS)
+		go s.certs.watch(watchCtx)
 	}
 	s.http = &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	if useTLS {
-		s.http.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
+		s.http.TLSConfig = &tls.Config{GetCertificate: s.certs.get, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
 		// Plain-HTTP connections on the same port are redirected to https.
 		ln = newMuxListener(ln, s.http.TLSConfig, s.log)
 	}
@@ -275,45 +270,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 }
 
-// certificate resolves the listener certificate from the configuration:
-// the operator's files, a self-signed one kept under the data root, or
-// none (plain HTTP).
-func (s *Server) certificate() (cert tls.Certificate, useTLS bool, err error) {
-	switch {
-	case s.cfg.TLSCert != "":
-		cert, err = tls.LoadX509KeyPair(s.cfg.TLSCert, s.cfg.TLSKey)
-		if err != nil {
-			return cert, false, err
-		}
-		s.log.Info("tls certificate", "source", "files", "certificate", s.cfg.TLSCert)
-		return cert, true, nil
-	case s.cfg.TLS == "self-signed":
-		ss, err := loadOrCreateSelfSigned(filepath.Join(s.cfg.Root, selfSignedDir), s.cfg.Address, s.cfg.Domains, time.Now())
-		if err != nil {
-			return cert, false, err
-		}
-		s.tlsFingerprint = ss.fingerprint
-		attrs := []any{"source", "self-signed", "certificate", ss.certPath, "sha256_fingerprint", ss.fingerprint,
-			"names", ss.names(), "not_after", ss.leaf.NotAfter.UTC().Format(time.RFC3339)}
-		switch {
-		case ss.created:
-			s.log.Warn("generated a self-signed TLS certificate; clients must trust this file or pin the fingerprint", attrs...)
-		case ss.renewed:
-			s.log.Warn("the self-signed TLS certificate had expired and was replaced; clients that pinned the old fingerprint must update", attrs...)
-		default:
-			s.log.Info("tls certificate", attrs...)
-		}
-		if left := time.Until(ss.leaf.NotAfter); left < selfSignedWarnDays*24*time.Hour {
-			s.log.Warn("the self-signed TLS certificate expires soon and will be replaced at the first start after expiry", "days_left", int(left.Hours()/24))
-		}
-		if len(ss.missing) > 0 {
-			s.log.Warn("the self-signed TLS certificate does not cover every name this server answers to; delete it to generate a new one", "missing", ss.missing)
-		}
-		return ss.cert, true, nil
-	}
-	return cert, false, nil
-}
-
 // Addr is the address the server is listening on (nil until
 // ListenAndServe has bound it).
 func (s *Server) Addr() net.Addr {
@@ -322,10 +278,6 @@ func (s *Server) Addr() net.Addr {
 	}
 	return nil
 }
-
-// TLSFingerprint is the SHA-256 fingerprint of the self-signed
-// certificate, or "" when TLS uses operator files or is off.
-func (s *Server) TLSFingerprint() string { return s.tlsFingerprint }
 
 // Close releases resources.
 func (s *Server) Close() error {

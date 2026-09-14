@@ -156,11 +156,3 @@ func (p *peekedConn) CloseWrite() error {
 	}
 	return nil
 }
-
-// hsts adds Strict-Transport-Security to every response served over TLS.
-func hsts(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Strict-Transport-Security", "max-age=63072000")
-		next.ServeHTTP(w, r)
-	})
-}

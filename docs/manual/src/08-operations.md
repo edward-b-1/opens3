@@ -96,8 +96,11 @@ new version.
   as container probes.
 - `/opens3/metrics` is Prometheus text: `opens3_s3_requests_total` by
   operation and status, request latency histograms, bytes in and out,
-  notification deliveries, purged credentials, plus Go runtime and process
-  metrics.
+  notification deliveries, purged credentials,
+  `opens3_tls_certificate_not_after_seconds` (the certificate's expiry as
+  a Unix timestamp, for an alert before it lapses) and
+  `opens3_tls_certificate_reloads_total` by result, plus Go runtime and
+  process metrics.
 - `opens3 admin info` or the console's Status page: version, uptime,
   bucket and object counts, disk usage.
 

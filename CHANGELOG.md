@@ -21,6 +21,12 @@ tagged tree.
 
 ### Added
 
+- TLS certificate reload without restart: the certificate and key files
+  are checked every minute and a changed pair is taken into service;
+  `SIGHUP` reloads at once. A pair that fails to parse, whose key does
+  not match or that has expired is refused and the current certificate
+  kept. Metrics `opens3_tls_certificate_not_after_seconds` and
+  `opens3_tls_certificate_reloads_total`.
 - `--tls self-signed` (`OPENS3_TLS=self-signed`): the server generates a
   certificate and key under `<root>/tls` on first start, reuses them on
   later starts, replaces them when expired, and logs the SHA-256

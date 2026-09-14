@@ -131,6 +131,15 @@ func runServer(args []string) int {
 		return 1
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// SIGHUP reloads the TLS certificate (renewal tooling convention).
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	go func() {
+		for range hup {
+			_ = srv.ReloadTLS()
+		}
+	}()
 	defer stop()
 	cfg.Log.Info("starting opens3", "version", version, "config", cfg.String())
 	if err := srv.ListenAndServe(ctx); err != nil {

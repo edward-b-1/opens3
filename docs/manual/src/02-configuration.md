@@ -74,6 +74,18 @@ To use your own certificate instead, provide the pair in PEM format:
 export OPENS3_TLS_CERT=/etc/opens3/tls.crt OPENS3_TLS_KEY=/etc/opens3/tls.key
 ```
 
+**Renewal needs no restart.** The server checks the certificate and key
+files once a minute and picks up a changed pair; `kill -HUP <pid>` picks
+it up at once, which is what to put in a renewal hook. Write the key
+first and the certificate second, or replace both atomically, so no
+check sees a certificate with the old key. A pair that does not parse,
+whose key does not match, or that has already expired is refused and
+logged, and the certificate in service stays until a good pair arrives.
+Connections already open are not affected; new connections get the new
+certificate. A self-signed certificate is regenerated the same way when
+it expires, and `kill -HUP` after deleting `<root>/tls/` generates a
+fresh one. Each reload logs the new fingerprint.
+
 Either way, with TLS on:
 
 - the listener requires TLS 1.2 or later and prefers TLS 1.3;

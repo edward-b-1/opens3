@@ -13,12 +13,10 @@ Move an item to "Done" with the commit that closed it.
       `golang.org/x/crypto/acme/autocert`, cached under the data root.
       Decision pending: take the dependency, or leave public certificates
       to a reverse proxy.
-   2. Reload certificate files when they change (no restart for external
-      renewal tooling).
-   3. Wildcard certificates for virtual-host bucket addressing
+   2. Wildcard certificates for virtual-host bucket addressing
       (`*.s3.example.com`): document; support a provided wildcard
       certificate first; DNS-01 providers later if needed.
-   4. Mutual TLS (client certificates), later.
+   3. Mutual TLS (client certificates), later.
 
 3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
    without the server: walk the metadata, verify every referenced blob
@@ -52,6 +50,11 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- TLS certificate reload without restart: files polled every minute,
+  `SIGHUP` for an immediate reload, self-signed certificates regenerated
+  live when expired; a bad pair is refused and the current certificate
+  kept; expiry gauge and reload counter metrics.
 
 - `--tls self-signed` / `OPENS3_TLS=self-signed`: a certificate generated
   under `<root>/tls` on first start (825 days, replaced when expired),

@@ -249,6 +249,18 @@ To use your own certificate instead, provide the pair in PEM format:
 export OPENS3_TLS_CERT=/etc/opens3/tls.crt OPENS3_TLS_KEY=/etc/opens3/tls.key
 ```
 
+**Renewal needs no restart.** The server checks the certificate and key
+files once a minute and picks up a changed pair; `kill -HUP <pid>` picks
+it up at once, which is what to put in a renewal hook. Write the key
+first and the certificate second, or replace both atomically, so no
+check sees a certificate with the old key. A pair that does not parse,
+whose key does not match, or that has already expired is refused and
+logged, and the certificate in service stays until a good pair arrives.
+Connections already open are not affected; new connections get the new
+certificate. A self-signed certificate is regenerated the same way when
+it expires, and `kill -HUP` after deleting `<root>/tls/` generates a
+fresh one. Each reload logs the new fingerprint.
+
 Either way, with TLS on:
 
 - the listener requires TLS 1.2 or later and prefers TLS 1.3;
@@ -877,8 +889,11 @@ new version.
   as container probes.
 - `/opens3/metrics` is Prometheus text: `opens3_s3_requests_total` by
   operation and status, request latency histograms, bytes in and out,
-  notification deliveries, purged credentials, plus Go runtime and process
-  metrics.
+  notification deliveries, purged credentials,
+  `opens3_tls_certificate_not_after_seconds` (the certificate's expiry as
+  a Unix timestamp, for an alert before it lapses) and
+  `opens3_tls_certificate_reloads_total` by result, plus Go runtime and
+  process metrics.
 - `opens3 admin info` or the console's Status page: version, uptime,
   bucket and object counts, disk usage.
 
