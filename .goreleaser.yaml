@@ -97,7 +97,7 @@ dockers_v2:
       - ghcr.io/edward-b-1/opens3
     tags:
       - "{{ .Version }}"
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
+      - "{{ if and (not .IsSnapshot) (not .Prerelease) }}latest{{ end }}"
     platforms:
       - linux/amd64
       - linux/arm64
@@ -157,9 +157,10 @@ release:
   github:
     owner: edward-b-1
     name: opens3
-  # v0.x releases are normal releases, not pre-releases: the note below
-  # says what is and is not stable.
-  prerelease: false
+  # v0.x releases are normal releases (the note below says what is and is
+  # not stable); only tags with a pre-release suffix (v0.1.0-rc1) are
+  # marked pre-release, and those do not move the image's `latest` tag.
+  prerelease: auto
   draft: false
   mode: replace
   name_template: "OpenS3 {{ .Tag }}"
