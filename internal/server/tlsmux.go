@@ -2,7 +2,9 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"encoding/xml"
 	"errors"
 	"io"
 	"log/slog"
@@ -99,11 +101,25 @@ func (m *muxListener) redirect(c net.Conn, br *bufio.Reader) {
 			"Location": {target}, "Content-Type": {"text/plain; charset=utf-8"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader("use https://\n")), ContentLength: 13}
 	} else {
 		m.log.Info("plain http request to the TLS port refused", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
-		body := `<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidRequest</Code><Message>This server requires HTTPS. Use ` + target + `</Message><Resource>` + req.URL.Path + `</Resource></Error>`
+		var b bytes.Buffer
+		b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidRequest</Code><Message>`)
+		xml.EscapeText(&b, []byte("This server requires HTTPS. Use "+target))
+		b.WriteString(`</Message><Resource>`)
+		xml.EscapeText(&b, []byte(req.URL.Path))
+		b.WriteString(`</Resource></Error>`)
+		body := b.String()
 		resp = &http.Response{StatusCode: http.StatusBadRequest, ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{
 			"Content-Type": {"application/xml"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body))}
 	}
 	_ = resp.Write(c)
+	// Lingering close, as net/http does: half-close the write side and drain
+	// whatever the client still sends, so the close never turns into a TCP
+	// reset that discards the response before the client has read it.
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	}
+	_ = c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_, _ = io.Copy(io.Discard, br)
 }
 
 func (m *muxListener) Accept() (net.Conn, error) {
@@ -133,6 +149,14 @@ type peekedConn struct {
 }
 
 func (p *peekedConn) Read(b []byte) (int, error) { return p.r.Read(b) }
+
+// CloseWrite half-closes the underlying connection when it supports it.
+func (p *peekedConn) CloseWrite() error {
+	if cw, ok := p.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
+}
 
 // hsts adds Strict-Transport-Security to every response served over TLS.
 func hsts(next http.Handler) http.Handler {

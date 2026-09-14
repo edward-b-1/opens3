@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"encoding/xml"
 	"io"
 	"log/slog"
 	"math/big"
@@ -78,7 +79,7 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 		t.Fatalf("PUT redirect: %d", resp.StatusCode)
 	}
 	// S3 clients get an S3 error naming the https URL, never a redirect.
-	req, _ = http.NewRequest("GET", "http://"+addr+"/bucket/?list-type=2", nil)
+	req, _ = http.NewRequest("GET", "http://"+addr+"/bucket/?list-type=2&encoding-type=url", nil)
 	resp, err = pc.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -87,6 +88,12 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 400 || !strings.Contains(string(body), "<Code>InvalidRequest</Code>") || !strings.Contains(string(body), "https://"+addr+"/bucket/") {
 		t.Fatalf("s3 client: %d %s", resp.StatusCode, body)
+	}
+	var parsed struct {
+		Code, Message string
+	}
+	if err := xml.Unmarshal(body, &parsed); err != nil || parsed.Code != "InvalidRequest" || !strings.Contains(parsed.Message, "&encoding-type=url") {
+		t.Fatalf("error body must be well-formed XML with the full URL: %v %+v", err, parsed)
 	}
 	// Garbage is dropped without a panic.
 	c, _ := net.Dial("tcp", addr)
