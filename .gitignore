@@ -8,3 +8,5 @@ coverage.html
 /tests/s3tests/results/
 .env
 /tests/awscli/results/
+/tests/console/results/
+/tests/console/.cache/

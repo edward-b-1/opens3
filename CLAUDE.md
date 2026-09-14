@@ -14,6 +14,8 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
   `tests/s3tests/known-failures.txt` may only shrink. Run it after any
   change to internal/s3api or internal/object. `go run ./tools/apicoverage`
   regenerates docs/API-COVERAGE.md after router changes.
+- Console: `make console-test` (ESLint + Playwright browser smoke test in
+  Docker, about a minute) must be run after any change to internal/console/static.
 - Subsystems wire themselves in via internal/server hooks
   (RegisterExtension/RegisterMount/RegisterStopper) from their own file in
   internal/server; do not grow server.go.

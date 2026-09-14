@@ -317,8 +317,9 @@ func TestNonAdminDenied(t *testing.T) {
 	if key == nil || len(key["accessKey"].(string)) != 20 || len(secret) != 40 {
 		t.Fatalf("generated credentials missing: %v", out)
 	}
-	// Access keys are for the API only: the pair is refused at the console.
-	if resp, out := e.do(newClient(), "POST", "/console/api/login", map[string]string{"user": key["accessKey"].(string), "password": secret}, nil); resp.StatusCode != 401 {
+	// Access keys are for the API only: the pair is refused at the console,
+	// with a message that says so.
+	if resp, out := e.do(newClient(), "POST", "/console/api/login", map[string]string{"user": key["accessKey"].(string), "password": secret}, nil); resp.StatusCode != 401 || errCode(out) != "AccessKeyNotAccepted" {
 		t.Fatalf("key pair must not sign in: %d %v", resp.StatusCode, out)
 	}
 	if resp, out := e.do(newClient(), "POST", "/console/api/login", map[string]string{"accessKey": key["accessKey"].(string), "secretKey": secret}, nil); resp.StatusCode != 400 || errCode(out) != "AccessKeyNotAccepted" {

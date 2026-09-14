@@ -301,7 +301,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.User == "" && in.AccessKey != "" {
-		h.fail(w, r, apiErr(http.StatusBadRequest, "AccessKeyNotAccepted", "the console signs in with a user name and console password; access keys work only with the S3 API"))
+		h.fail(w, r, apiErr(http.StatusBadRequest, "AccessKeyNotAccepted", accessKeyNotAcceptedMsg))
 		return
 	}
 	bad := apiErr(http.StatusUnauthorized, "InvalidCredentials", "invalid user name or password")
@@ -312,6 +312,12 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	id, err := h.d.IAM.VerifyPassword(in.User, in.Password)
 	if err != nil {
 		h.d.Log.Info("console login failed", "user", in.User)
+		if looksLikeKeyPair(in.User, in.Password) {
+			// An API key pair pasted into the form: say why it is refused
+			// rather than "invalid user name or password". Decided on the
+			// shape of the input alone, never on whether such a key exists.
+			bad = apiErr(http.StatusUnauthorized, "AccessKeyNotAccepted", accessKeyNotAcceptedMsg)
+		}
 		h.fail(w, r, bad)
 		return
 	}
@@ -325,6 +331,23 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	h.d.Log.Info("console login", "user", id.Name(), "session", ak)
 	s := &session{id: h.sessionIdentity(id, ak), accessKey: ak}
 	writeJSON(w, http.StatusOK, h.meInfo(s, exp))
+}
+
+const accessKeyNotAcceptedMsg = "the console signs in with a user name and console password; access keys work only with the S3 API"
+
+// looksLikeKeyPair reports whether user and password have the shape of a
+// generated access key pair (iam.GenerateAccessKey / GenerateSecretKey): a
+// 20-character upper-case alphanumeric ID and a 40-character secret.
+func looksLikeKeyPair(user, password string) bool {
+	if len(user) != iam.AccessKeyLength || len(password) != iam.SecretKeyLength {
+		return false
+	}
+	for _, c := range user {
+		if !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request, s *session) error {

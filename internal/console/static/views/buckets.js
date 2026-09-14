@@ -27,7 +27,7 @@ views.buckets = async function (main) {
   }
 
   async function create() {
-    const name = h('input.input', { required: true, pattern: '[a-z0-9.-]{3,63}', placeholder: 'my-bucket', spellcheck: false });
+    const name = h('input.input', { required: true, pattern: '[a-z0-9.\\-]{3,63}', placeholder: 'my-bucket', spellcheck: false });
     const versioning = h('input', { type: 'checkbox' });
     const lock = h('input', { type: 'checkbox', onChange: () => { if (lock.checked) versioning.checked = true; } });
     const tags = tagsField([]);

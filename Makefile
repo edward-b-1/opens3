@@ -46,3 +46,16 @@ awscli:
 .PHONY: manual
 manual:
 	docs/manual/build.sh
+
+# Console JavaScript lint: ESLint in the pinned node image (needs Docker).
+.PHONY: lint-js
+lint-js:
+	tests/console/lint.sh
+
+# Console checks: lint-js, then the Playwright browser smoke test against a
+# local server (needs Docker). Extra Playwright args via CONSOLE_ARGS,
+# e.g. make console-test CONSOLE_ARGS='-g identity'; CONSOLE_BROWSERS=chromium
+# skips Firefox and WebKit.
+.PHONY: console-test
+console-test: lint-js
+	tests/console/run.sh $(CONSOLE_ARGS)
