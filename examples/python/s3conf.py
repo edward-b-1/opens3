@@ -47,23 +47,25 @@ BUCKET_PREFIX = os.environ.get("OPENS3_BUCKET_PREFIX", "pyclient-test")
 
 
 def _tls_verify(value: str):
-    """'true' -> verify with system CAs, 'false' -> no verification (self-signed
-    dev certs), anything else -> path to a CA bundle / server certificate."""
+    """Certificate verification is always on. 'true' (or empty) verifies
+    against the system CA store; any other value is a path to a PEM CA bundle
+    or the server's own certificate (needed for self-signed dev certs)."""
     v = value.strip()
-    if v.lower() in ("", "1", "true", "yes"):
+    if v.lower() in ("", "true", "1", "yes"):
         return True
-    if v.lower() in ("0", "false", "no"):
-        return False
+    if v.lower() in ("false", "0", "no"):
+        raise SystemExit(
+            "OPENS3_TLS_VERIFY=false is not supported: point it at the server's "
+            "certificate or a CA bundle instead"
+        )
     v = os.path.expanduser(v)
-    return v if os.path.isabs(v) else str((HERE / v).resolve())
+    v = v if os.path.isabs(v) else str((HERE / v).resolve())
+    if not os.path.exists(v):
+        raise SystemExit(f"OPENS3_TLS_VERIFY: certificate file not found: {v}")
+    return v
 
 
 TLS_VERIFY = _tls_verify(os.environ.get("OPENS3_TLS_VERIFY", "true"))
-
-if TLS_VERIFY is False:
-    import urllib3
-
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def session() -> boto3.session.Session:

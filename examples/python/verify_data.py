@@ -58,7 +58,12 @@ def main() -> None:
     failures = 0
 
     # 1. Paginated listing covers every manifest key.
-    listed = {o["Key"]: o for o in list_all(s3, bucket)}
+    try:
+        listed = {o["Key"]: o for o in list_all(s3, bucket)}
+    except ClientError as ex:
+        if ex.response["Error"]["Code"] == "NoSuchBucket":
+            raise SystemExit(f"bucket {bucket} does not exist on the server; run upload_data.py first")
+        raise
     missing = set(expected) - set(listed)
     if missing:
         failures += 1
