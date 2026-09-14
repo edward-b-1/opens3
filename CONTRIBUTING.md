@@ -4,7 +4,7 @@
 
 By contributing you certify the Developer Certificate of Origin
 (https://developercertificate.org/): that you wrote the change or have the
-right to submit it under the Apache-2.0 licence. Add a sign-off line to every
+right to submit it under the AGPL-3.0-or-later licence. Add a sign-off line to every
 commit:
 
     Signed-off-by: Your Name <you@example.com>

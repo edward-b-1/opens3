@@ -13,6 +13,12 @@ tagged tree.
 
 ## [Unreleased]
 
+### Changed
+
+- **Licence: AGPL-3.0-or-later**, from Apache License 2.0. Releases
+  0.1.0 to 0.2.1 remain Apache-2.0. The reasoning is in `GOVERNANCE.md`
+  section 1; the name is covered by the new `TRADEMARKS.md`.
+
 ## [0.2.1] - 2026-09-14
 
 Security release: see advisory OPENS3-2026-003 in `SECURITY.md`. No

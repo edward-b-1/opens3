@@ -1,6 +1,6 @@
 # OpenS3 — Plan and Roadmap
 
-OpenS3 is an Apache-2.0 licensed, S3-compatible object store written in Go.
+OpenS3 is an AGPL-3.0 licensed, S3-compatible object store written in Go.
 The goal is feature parity with Amazon S3's public API and with the union of
 the features offered by the open-source alternatives (MinIO before its
 feature reduction, SeaweedFS, Garage, Ceph RGW, RustFS, Zenko CloudServer),
@@ -12,7 +12,8 @@ with no "enterprise only" tier.
   S3 server framework (Rust's `s3s` is the only one), so the API layer is
   our own; Versity's Apache-2.0 gateway is used as tested reference
   material, not as a base.
-- **Licence: Apache-2.0**, contributions under a Developer Certificate of
+- **Licence: AGPL-3.0-or-later** (Apache-2.0 for releases before 0.3.0),
+  contributions under a Developer Certificate of
   Origin (no CLA). See `../GOVERNANCE.md`.
 - **Unique selling points** (detail in `SURVEY.md`, section 6):
   1. Verified fidelity: differential testing against real AWS S3, a

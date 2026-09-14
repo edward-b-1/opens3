@@ -1,6 +1,6 @@
 # OpenS3
 
-An open-source, Apache-2.0 licensed, S3-compatible object store in Go.
+An open-source, AGPL-3.0 licensed, S3-compatible object store in Go.
 
 OpenS3 aims for the complete Amazon S3 API as it exists today, verified by
 differential testing against AWS, in a single static binary with no
@@ -108,4 +108,12 @@ make release-snapshot  # dist/: the release archives for this commit, unsigned
 
 ## Licence
 
-Apache License 2.0. See `LICENSE`.
+GNU Affero General Public License, version 3 or later. See `LICENSE`.
+Releases before 0.3.0 were published under the Apache License 2.0 and
+remain available under it. The name is covered by `TRADEMARKS.md`, not
+by the licence.
+
+Why the AGPL: it keeps every improvement to the server in the open,
+including improvements made by someone who offers it as a hosted service.
+Anyone may use, modify, sell or host OpenS3; what they may not do is take
+it proprietary.

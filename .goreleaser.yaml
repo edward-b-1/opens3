@@ -45,6 +45,7 @@ archives:
     name_template: "opens3_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
     files:
       - LICENSE
+      - TRADEMARKS.md
       - README.md
       - docs/MANUAL.md
 
@@ -109,13 +110,13 @@ dockers_v2:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .CommitDate }}"
-      org.opencontainers.image.licenses: Apache-2.0
+      org.opencontainers.image.licenses: AGPL-3.0-or-later
     annotations:
       "index,manifest:org.opencontainers.image.description": S3-compatible object store
       "index,manifest:org.opencontainers.image.source": https://github.com/edward-b-1/opens3
       "index,manifest:org.opencontainers.image.version": "{{ .Version }}"
       "index,manifest:org.opencontainers.image.revision": "{{ .FullCommit }}"
-      "index,manifest:org.opencontainers.image.licenses": Apache-2.0
+      "index,manifest:org.opencontainers.image.licenses": AGPL-3.0-or-later
 
 # Keyless signatures on the pushed multi-platform image, by digest (so the
 # signature stays valid if a tag is moved). Verify with:
