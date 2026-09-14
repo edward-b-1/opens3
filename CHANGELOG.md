@@ -13,8 +13,16 @@ tagged tree.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-14
+
+The first release under the AGPL-3.0-or-later (see Changed), with a
+further round of authorisation fixes: advisory OPENS3-2026-004 in
+`SECURITY.md`. No on-disk format change since 0.2.1.
+
 ### Security
 
+- Copy sources are bound to the source bucket's incarnation even when
+  the source object does not exist at authorisation time.
 - Administrative actions (`iam:`, `kms:`, `sts:`, `opens3:`) are
   evaluated against IAM resource ARNs, never the S3 ARN: a statement
   granting `Action: *` on `arn:aws:s3:::*` no longer covers them, and IAM
@@ -272,7 +280,8 @@ scenarios.
   targets other than webhooks (phase 2).
 - DSSE-KMS is accepted and treated as SSE-KMS (single layer).
 
-[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/edward-b-1/opens3/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/edward-b-1/opens3/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/edward-b-1/opens3/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edward-b-1/opens3/compare/v0.1.0...v0.1.1

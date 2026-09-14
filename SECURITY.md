@@ -88,6 +88,27 @@ accepts only sessions issued by a console password login and applies the
 issuer check on every console path that creates or changes credentials.
 Deployments that do not use session policies are not affected.
 
+### OPENS3-2026-004: IAM actions matched S3 resource patterns; own keys bypassed session policies
+
+**Affected:** v0.1.0 to v0.2.1. **Fixed in:** v0.3.0.
+
+1. Administrative actions (`iam:`, `kms:`, `sts:`, `opens3:`) were
+   evaluated against an empty S3 resource ARN, so a policy statement
+   granting `Action: "*"` on `Resource: "arn:aws:s3:::*"`, written to mean
+   "everything on S3", also granted every administrative action,
+   including creating access keys for other users. Deployments whose
+   policies use `Action: "*"` with an S3 resource are affected; the
+   built-in policies are not.
+2. Listing, deactivating and deleting one's own access keys through the
+   IAM API bypassed authorisation, so a credential narrowed by a session
+   policy could deactivate or delete its user's permanent keys.
+3. `s3:ExistingObjectTag` conditions were not evaluated for deletes, so a
+   deny keyed on an object's tag did not protect it from deletion.
+
+v0.3.0 evaluates administrative actions against IAM resource ARNs (with
+AWS-style self-only policies now possible), authorises own-key
+management like every other action, and loads the object for deletes.
+
 ## Supported versions
 
 Each minor release receives security fixes for at least twelve months after
