@@ -50,9 +50,12 @@ type Key struct {
 	// so a derived session can only narrow, never widen.
 	ParentPolicies []json.RawMessage `json:"pp,omitempty"`
 	SessionToken   string            `json:"st,omitempty"` // STS only
-	Expires        *time.Time        `json:"x,omitempty"`  // STS only
-	Description    string            `json:"d,omitempty"`
-	Created        time.Time         `json:"c"`
+	// Console marks an STS key issued by a console password login; only
+	// such keys are accepted as console sessions.
+	Console     bool       `json:"cs,omitempty"`
+	Expires     *time.Time `json:"x,omitempty"` // STS only
+	Description string     `json:"d,omitempty"`
+	Created     time.Time  `json:"c"`
 }
 
 // Group is a named set of users with attached policies.

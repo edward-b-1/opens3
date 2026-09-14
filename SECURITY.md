@@ -75,6 +75,19 @@ creates them owner-only (existing files are not changed).
    authorised against a bucket could land in a bucket of the same name
    created after the original was deleted. Microsecond windows, but real.
 
+### OPENS3-2026-003: console accepted any STS credential as a session
+
+**Affected:** v0.1.0 to v0.2.0. **Fixed in:** v0.2.1.
+
+The console accepted any temporary (STS) credential as a logged-in
+session, and its self-service key management did not apply the
+credential-issuer check added in v0.1.1. A credential narrowed by a
+session policy could call `AssumeRole`, present the result as a console
+session and create or rotate an unrestricted key for its user. v0.2.1
+accepts only sessions issued by a console password login and applies the
+issuer check on every console path that creates or changes credentials.
+Deployments that do not use session policies are not affected.
+
 ## Supported versions
 
 Each minor release receives security fixes for at least twelve months after

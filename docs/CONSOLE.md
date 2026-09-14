@@ -11,7 +11,7 @@ operating-system preference.
 
 1. Start the server: `go run ./cmd/opens3 server --root /tmp/x` (or the
    `opens3` binary). Root credentials come from `OPENS3_ROOT_USER` /
-   `OPENS3_ROOT_PASSWORD` (default `opens3admin` / `opens3admin`).
+   `OPENS3_ROOT_PASSWORD` (required; there are no defaults).
 2. Open <http://localhost:9000/console/>.
 3. Enter any OpenS3 access key and secret: the root credentials, an IAM
    user's key, or a service account. Temporary STS credentials cannot be

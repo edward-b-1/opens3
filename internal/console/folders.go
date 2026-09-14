@@ -198,7 +198,13 @@ func (h *Handler) zipPrefix(w http.ResponseWriter, r *http.Request, s *session) 
 				skipped = append(skipped, o.Key+" ("+err.Error()+")")
 				continue
 			}
-			fh := &zip.FileHeader{Name: strings.TrimPrefix(o.Key, base), Method: zip.Store, Modified: o.ModTime}
+			name, ok := zipEntryName(strings.TrimPrefix(o.Key, base))
+			if !ok {
+				res.Body.Close()
+				skipped = append(skipped, o.Key+" (name is not a safe path)")
+				continue
+			}
+			fh := &zip.FileHeader{Name: name, Method: zip.Store, Modified: o.ModTime}
 			fh.SetMode(0o644)
 			fw, err := zw.CreateHeader(fh)
 			if err != nil {
@@ -227,4 +233,18 @@ func (h *Handler) zipPrefix(w http.ResponseWriter, r *http.Request, s *session) 
 		}
 	}
 	return zw.Close()
+}
+
+// zipEntryName makes an archive entry name that cannot escape the
+// extraction directory: no absolute paths, no "." or ".." segments.
+func zipEntryName(key string) (string, bool) {
+	if key == "" || strings.HasPrefix(key, "/") {
+		return "", false
+	}
+	for _, seg := range strings.Split(key, "/") {
+		if seg == "." || seg == ".." {
+			return "", false
+		}
+	}
+	return key, true
 }

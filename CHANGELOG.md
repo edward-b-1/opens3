@@ -13,6 +13,32 @@ tagged tree.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-14
+
+Security release: see advisory OPENS3-2026-003 in `SECURITY.md`. No
+on-disk format change (a new optional flag on console session records).
+
+### Security
+
+- Only credentials issued by a console password login are accepted as
+  console sessions. STS credentials obtained through `AssumeRole` were
+  accepted before, which let a credential narrowed by a session policy
+  reach the console's self-service key management and create or rotate
+  an unrestricted key for its user. The console's credential paths also
+  apply the same issuer check as the IAM and admin APIs.
+- `opens3 fsck repair` refuses any path or bucket name in a report that
+  would lead outside the data directory.
+- Console folder downloads skip object keys that would extract outside
+  the archive's directory.
+- The readiness endpoint no longer echoes internal error text.
+- S3 object responses carry `X-Content-Type-Options: nosniff`.
+
+### Changed
+
+- Documentation no longer claims default root credentials; the server has
+  always required them. `docker-compose.yml` requires `OPENS3_ROOT_USER`
+  as well as the password.
+
 ## [0.2.0] - 2026-09-14
 
 Operational tooling release with further authorisation fixes: see
@@ -211,7 +237,8 @@ scenarios.
   targets other than webhooks (phase 2).
 - DSSE-KMS is accepted and treated as SSE-KMS (single layer).
 
-[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/edward-b-1/opens3/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/edward-b-1/opens3/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edward-b-1/opens3/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/edward-b-1/opens3/releases/tag/v0.1.0

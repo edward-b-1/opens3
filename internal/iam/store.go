@@ -677,6 +677,17 @@ func (s *Store) DeleteKey(accessKey string) error {
 // restricted by an inline session policy. Returns access key, secret,
 // session token, expiry.
 func (s *Store) AssumeRole(id *Identity, sessionPolicy json.RawMessage, duration time.Duration) (ak, sk, token string, exp time.Time, err error) {
+	return s.assumeRole(id, sessionPolicy, duration, false)
+}
+
+// ConsoleSession issues the temporary credentials behind a console login.
+// They are marked so that STS credentials obtained any other way cannot
+// be presented as a console session.
+func (s *Store) ConsoleSession(id *Identity, duration time.Duration) (ak, sk, token string, exp time.Time, err error) {
+	return s.assumeRole(id, nil, duration, true)
+}
+
+func (s *Store) assumeRole(id *Identity, sessionPolicy json.RawMessage, duration time.Duration, console bool) (ak, sk, token string, exp time.Time, err error) {
 	if duration < 15*time.Minute {
 		duration = time.Hour
 	}
@@ -711,7 +722,7 @@ func (s *Store) AssumeRole(id *Identity, sessionPolicy json.RawMessage, duration
 	if len(sessionPolicy) == 0 && len(parents) > 0 {
 		sessionPolicy, parents = parents[len(parents)-1], parents[:len(parents)-1]
 	}
-	k := &Key{AccessKey: ak, SecretWrapped: s.wrapSecret(sk), User: user, Kind: KindSTS, Enabled: true,
+	k := &Key{AccessKey: ak, SecretWrapped: s.wrapSecret(sk), User: user, Kind: KindSTS, Enabled: true, Console: console,
 		SessionPolicy: sessionPolicy, ParentPolicies: parents, SessionToken: token, Expires: &exp, Created: time.Now().UTC()}
 	err = s.kv.Update(func(tx kv.Txn) error {
 		if id.IsRoot {

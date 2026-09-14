@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/edward-b-1/opens3/internal/console"
 	"github.com/edward-b-1/opens3/internal/server"
@@ -24,9 +25,10 @@ const (
 )
 
 type env struct {
-	t  *testing.T
-	ts *httptest.Server
-	c  *http.Client // cookie-aware client
+	t   *testing.T
+	ts  *httptest.Server
+	srv *server.Server
+	c   *http.Client // cookie-aware client
 }
 
 func newEnv(t *testing.T) *env {
@@ -38,7 +40,7 @@ func newEnv(t *testing.T) *env {
 	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() { ts.Close(); srv.Close() })
-	return &env{t: t, ts: ts, c: newClient()}
+	return &env{t: t, ts: ts, srv: srv, c: newClient()}
 }
 
 func newClient() *http.Client {
@@ -440,5 +442,33 @@ func TestSettingsAssetsServed(t *testing.T) {
 	second.Body.Close()
 	if second.StatusCode != http.StatusNotModified {
 		t.Fatalf("conditional GET: %d", second.StatusCode)
+	}
+}
+
+// TestSTSCredentialsAreNotConsoleSessions: temporary credentials from
+// AssumeRole must not work as a console cookie; only a password login
+// issues sessions.
+func TestSTSCredentialsAreNotConsoleSessions(t *testing.T) {
+	e := newEnv(t)
+	id, err := e.srv.IAM.Resolve(rootUser, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ak, _, tok, _, err := e.srv.IAM.AssumeRole(id, nil, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newClient()
+	c.Jar.SetCookies(mustURL(t, e.ts.URL+"/console/"), []*http.Cookie{{Name: console.CookieName, Value: ak + "." + tok}})
+	if resp, _ := e.do(c, "GET", "/console/api/me", nil, nil); resp.StatusCode != 401 {
+		t.Fatalf("STS credentials accepted as a console session: %d", resp.StatusCode)
+	}
+	if resp, _ := e.do(c, "POST", "/console/api/keys", map[string]any{"user": "root"}, nil); resp.StatusCode != 401 {
+		t.Fatalf("STS credentials reached key creation: %d", resp.StatusCode)
+	}
+	// A real login still works.
+	e.mustLogin(e.c, rootUser, rootPass)
+	if resp, _ := e.do(e.c, "GET", "/console/api/me", nil, nil); resp.StatusCode != 200 {
+		t.Fatalf("login session: %d", resp.StatusCode)
 	}
 }

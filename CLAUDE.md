@@ -23,8 +23,8 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
   (RegisterExtension/RegisterMount/RegisterStopper) from their own file in
   internal/server; do not grow server.go.
 - Run locally: `go run ./cmd/opens3 server --address :9000 --root ./data`
-  (root credentials default to `opens3admin` / `opens3admin`, override with
-  `OPENS3_ROOT_USER` / `OPENS3_ROOT_PASSWORD`).
+  (root credentials are required: set `OPENS3_ROOT_USER` and
+  `OPENS3_ROOT_PASSWORD`; there are no defaults).
 
 ## Conventions
 

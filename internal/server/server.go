@@ -230,7 +230,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/opens3/health/live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/opens3/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := s.blob.Stats(r.Context()); err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			s.log.Error("readiness check failed", "err", err)
+			http.Error(w, "data directory unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

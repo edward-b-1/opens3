@@ -341,3 +341,26 @@ func md5b64(b []byte) string {
 	sum := md5.Sum(b)
 	return base64.StdEncoding.EncodeToString(sum[:])
 }
+
+func TestRepairStaysInsideTheDataDirectory(t *testing.T) {
+	f := newFixture(t)
+	outside := filepath.Join(filepath.Dir(f.root), "victim")
+	os.WriteFile(outside, []byte("x"), 0o600)
+	crafted := &Report{Problems: []Problem{
+		{Kind: OrphanFile, Bucket: "docs", Item: "../victim"},
+		{Kind: TempFile, Item: "/etc/passwd"},
+		{Kind: BucketDeleting, Bucket: "..", Item: ".."},
+		{Kind: OrphanPartRecords, Bucket: "../..", Item: "x"},
+	}}
+	for _, p := range crafted.Problems {
+		if _, err := Repair(f.ctx, f.db, f.root, &Report{Problems: []Problem{p}}, false); err == nil {
+			t.Errorf("%s %q/%q accepted", p.Kind, p.Bucket, p.Item)
+		}
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatal("a file outside the data directory was deleted")
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "meta", "opens3.db")); err != nil {
+		t.Fatal("the database was deleted")
+	}
+}

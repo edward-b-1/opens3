@@ -324,7 +324,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, bad)
 		return
 	}
-	ak, _, token, exp, err := h.d.IAM.AssumeRole(id, nil, SessionDuration)
+	ak, _, token, exp, err := h.d.IAM.ConsoleSession(id, SessionDuration)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -375,7 +375,10 @@ func (h *Handler) authenticate(r *http.Request) (*session, error) {
 	if err != nil {
 		return nil, unauth
 	}
-	if id.Key == nil || id.Key.Kind != iam.KindSTS {
+	if id.Key == nil || id.Key.Kind != iam.KindSTS || !id.Key.Console {
+		// Only credentials issued by a console login are sessions; STS
+		// credentials obtained through AssumeRole are not, so a restricted
+		// session cannot reach the console's self-service paths.
 		return nil, unauth
 	}
 	return &session{id: h.sessionIdentity(id, ak), accessKey: ak}, nil

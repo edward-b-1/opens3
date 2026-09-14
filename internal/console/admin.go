@@ -92,6 +92,9 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request, s *session) 
 }
 
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.mayIssueCredentials(s); err != nil {
+		return err
+	}
 	if err := h.admin(s, "iam:CreateUser"); err != nil {
 		return err
 	}
@@ -141,6 +144,9 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request, s *session)
 }
 
 func (h *Handler) setUserPassword(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.mayIssueCredentials(s); err != nil {
+		return err
+	}
 	if err := h.admin(s, "iam:UpdateUser"); err != nil {
 		return err
 	}
@@ -171,6 +177,9 @@ func (h *Handler) clearUserPassword(w http.ResponseWriter, r *http.Request, s *s
 // changeMyPassword lets a signed-in user change their own console password
 // after proving the current one.
 func (h *Handler) changeMyPassword(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.mayIssueCredentials(s); err != nil {
+		return err
+	}
 	var in struct {
 		Current string `json:"current"`
 		New     string `json:"new"`
@@ -287,10 +296,24 @@ func keyView(k *iam.Key) keyOut {
 // keyAccess allows users to manage their own keys; anything else needs the
 // admin permission.
 func (h *Handler) keyAccess(s *session, owner, adminAction string) error {
+	if err := h.mayIssueCredentials(s); err != nil {
+		return err
+	}
 	if owner != "" && owner == s.id.Name() && !s.id.IsRoot {
 		return nil
 	}
 	return h.admin(s, adminAction)
+}
+
+// mayIssueCredentials refuses credential creation and changes from a
+// session narrowed by a session policy: the result would carry none of
+// the restriction. Console logins are never narrowed; this guards the
+// invariant.
+func (h *Handler) mayIssueCredentials(s *session) error {
+	if err := iam.CheckCredentialIssuer(s.id); err != nil {
+		return apiErr(http.StatusForbidden, "AccessDenied", err.Error())
+	}
+	return nil
 }
 
 func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request, s *session) error {
@@ -314,6 +337,9 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request, s *session) e
 }
 
 func (h *Handler) createKey(w http.ResponseWriter, r *http.Request, s *session) error {
+	if err := h.mayIssueCredentials(s); err != nil {
+		return err
+	}
 	var in struct {
 		User          string          `json:"user"`
 		AccessKey     string          `json:"accessKey"`

@@ -98,8 +98,7 @@ against the bucket owner's canonical ID and against this account ID.
 ### Root
 
 - Configured with `OPENS3_ROOT_USER` and `OPENS3_ROOT_PASSWORD` (both
-  required; the documented development defaults are `opens3admin` /
-  `opens3admin`).
+  required; there are no defaults).
 - Never stored in the metadata database, so it cannot be locked out by
   deleting or disabling records.
 - Allowed to do everything unless a bucket policy explicitly denies it.

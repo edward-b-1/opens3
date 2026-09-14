@@ -156,6 +156,7 @@ func (s *Server) serveObject(c *reqCtx, head bool) error {
 	defer res.Body.Close()
 	o := res.Object
 	h := c.w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
 	setObjectHeaders(h, o, c.bkt)
 	if q.Get("x-amz-checksum-mode") != "" || strings.EqualFold(r.Header.Get("x-amz-checksum-mode"), "ENABLED") {
 		if partNumber > 0 && o.Checksum != nil && partNumber <= len(o.Parts) && o.Parts[partNumber-1].Checksum != "" {

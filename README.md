@@ -75,7 +75,7 @@ TLS add `--tls self-signed` (the server generates and keeps a certificate
 under the data root and logs its fingerprint) or set `OPENS3_TLS_CERT` and
 `OPENS3_TLS_KEY`; plain-HTTP requests to the same port are then redirected
 to https.
-Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
+Docker: `docker compose up` with `OPENS3_ROOT_USER` and `OPENS3_ROOT_PASSWORD` set.
 
 ## Documentation
 
@@ -88,6 +88,7 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 - `docs/IAM.md` — identities, access keys, policies, ACLs, how requests are authorised
 - `docs/IAM-API.md` — manage users, keys and policies with `aws iam`
 - `docs/ADMIN.md`, `docs/CONSOLE.md`, `docs/NOTIFICATIONS.md`
+- [MinIO console feature audit](docs/MINIO-CONSOLE-AUDIT.md) — historical and AIStor UI features, OpenS3 implementation status, and remaining gaps
 - `CHANGELOG.md`, `docs/RELEASING.md` — what changed, how releases are built and verified
 - `GOVERNANCE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
