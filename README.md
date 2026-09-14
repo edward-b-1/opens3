@@ -8,7 +8,7 @@ external dependencies, with every feature in the open-source build.
 
 **Status:** phase 1 complete (September 2026): single-node object store
 with versioning, multipart, object lock, SSE, IAM and policies, lifecycle,
-notifications, admin API and CLI, web console. 598 of 637 Ceph s3-tests
+notifications, admin API and CLI, web console. 600 of 637 Ceph s3-tests
 pass (`docs/CONFORMANCE.md`); 95 of 117 S3 operations are implemented
 (`docs/API-COVERAGE.md`). Not yet distributed or erasure-coded: that is
 phase 4. Roadmap in `docs/PLAN.md`; the survey that motivates the project

@@ -16,8 +16,8 @@ tagged tree.
 ## [0.1.0] - 2026-09-14
 
 First release: phase 1 of `docs/PLAN.md`, a single-node S3-compatible
-object store in one static binary. 598 of 637 Ceph s3-tests pass; 95 of
-117 S3 operations are implemented; the AWS CLI suite passes 442 of 442
+object store in one static binary. 600 of 637 Ceph s3-tests pass; 95 of
+117 S3 operations are implemented; the AWS CLI suite passes 457 of 457
 scenarios.
 
 ### Added
