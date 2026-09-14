@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/meta"
 )
 
 const s3NS = "http://s3.amazonaws.com/doc/2006-03-01/"

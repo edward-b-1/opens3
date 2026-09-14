@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/blob"
-	"gitlab.com/Birdsall/opens3/internal/kms"
-	"gitlab.com/Birdsall/opens3/internal/kv"
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/object"
+	"github.com/edward-b-1/OpenS3/internal/blob"
+	"github.com/edward-b-1/OpenS3/internal/kms"
+	"github.com/edward-b-1/OpenS3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/object"
 )
 
 var owner = object.Actor{CanonicalID: "owner", DisplayName: "owner"}

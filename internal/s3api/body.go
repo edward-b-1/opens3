@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
 )
 
 // bodyReader wraps the request body, decoding aws-chunked streams and

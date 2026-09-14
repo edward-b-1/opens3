@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gitlab.com/Birdsall/opens3/internal/server"
+	"github.com/edward-b-1/OpenS3/internal/server"
 )
 
 var version = "dev"

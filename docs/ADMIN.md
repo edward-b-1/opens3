@@ -102,7 +102,7 @@ curl -s --aws-sigv4 aws:amz:us-east-1:s3 --user "$OPENS3_ROOT_USER:$OPENS3_ROOT_
 
 ## Go client
 
-`gitlab.com/Birdsall/opens3/internal/admin` exports a `Client`
+`github.com/edward-b-1/OpenS3/internal/admin` exports a `Client`
 (`admin.NewClient(endpoint, accessKey, secretKey)`) with one method per
 endpoint (`Info`, `ListUsers`, `PutUser`, `CreateKey`, `RotateKey`,
 `PutPolicy`, `ListBuckets`, `CreateKMSKey`, ...). Errors from the server

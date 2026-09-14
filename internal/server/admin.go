@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"gitlab.com/Birdsall/opens3/internal/admin"
+	"github.com/edward-b-1/OpenS3/internal/admin"
 )
 
 // The admin REST API is mounted at /opens3/admin/v1/. See docs/ADMIN.md.

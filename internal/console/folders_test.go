@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/Birdsall/opens3/internal/console"
+	"github.com/edward-b-1/OpenS3/internal/console"
 )
 
 func TestFolderDeleteAndZip(t *testing.T) {

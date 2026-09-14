@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/object"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/object"
 )
 
 func keysOf(m map[string]any) []string {

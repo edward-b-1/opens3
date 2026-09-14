@@ -15,13 +15,13 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
-	"gitlab.com/Birdsall/opens3/internal/iam"
-	"gitlab.com/Birdsall/opens3/internal/kms"
-	"gitlab.com/Birdsall/opens3/internal/kv"
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/object"
-	"gitlab.com/Birdsall/opens3/internal/s3err"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/iam"
+	"github.com/edward-b-1/OpenS3/internal/kms"
+	"github.com/edward-b-1/OpenS3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/object"
+	"github.com/edward-b-1/OpenS3/internal/s3err"
 )
 
 // maxBody bounds admin request bodies (policy documents are small).

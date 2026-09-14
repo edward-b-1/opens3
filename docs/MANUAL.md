@@ -37,7 +37,7 @@ chapter files, not this file._
 ### Build
 
 ```sh
-git clone https://gitlab.com/Birdsall/opens3.git
+git clone https://github.com/edward-b-1/OpenS3.git
 cd opens3
 make build            # produces bin/opens3
 ```

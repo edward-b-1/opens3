@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/kv"
 )
 
 func openTestDB(t *testing.T) kv.Store {

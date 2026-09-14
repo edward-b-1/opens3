@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/checksum"
-	"gitlab.com/Birdsall/opens3/internal/kv"
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/s3err"
+	"github.com/edward-b-1/OpenS3/internal/checksum"
+	"github.com/edward-b-1/OpenS3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/s3err"
 )
 
 // CreateUploadInput parameters.

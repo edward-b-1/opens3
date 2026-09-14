@@ -3,8 +3,8 @@ package iam
 import (
 	"encoding/json"
 
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/policy"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/policy"
 )
 
 // Request is an authorisation request.

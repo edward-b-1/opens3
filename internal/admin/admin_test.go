@@ -20,9 +20,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"gitlab.com/Birdsall/opens3/internal/admin"
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
-	"gitlab.com/Birdsall/opens3/internal/server"
+	"github.com/edward-b-1/OpenS3/internal/admin"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/server"
 )
 
 const (

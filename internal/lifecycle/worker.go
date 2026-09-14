@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/kv"
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/object"
-	"gitlab.com/Birdsall/opens3/internal/s3err"
+	"github.com/edward-b-1/OpenS3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/object"
+	"github.com/edward-b-1/OpenS3/internal/s3err"
 )
 
 // Actor is the principal lifecycle actions are performed as.

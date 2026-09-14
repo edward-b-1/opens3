@@ -1,4 +1,4 @@
-module gitlab.com/Birdsall/opens3
+module github.com/edward-b-1/OpenS3
 
 go 1.27.1
 

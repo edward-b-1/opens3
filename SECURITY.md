@@ -2,12 +2,12 @@
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately by opening a confidential issue at
-https://gitlab.com/Birdsall/opens3/-/issues/new (tick "This issue is
-confidential"). You will receive an acknowledgement within three working
-days and a fix timeline within ten.
+Please report vulnerabilities privately through GitHub's private
+vulnerability reporting: https://github.com/edward-b-1/OpenS3/security/advisories/new
+You will receive an acknowledgement within three working days and a fix
+timeline within ten.
 
-Do not report security issues in public issues or merge requests.
+Do not report security issues in public issues or pull requests.
 
 ## What happens next
 

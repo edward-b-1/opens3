@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
 )
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }

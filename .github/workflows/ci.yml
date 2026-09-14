@@ -1,0 +1,18 @@
+# Mirrors the local gate (`make ci`): vet + race tests on every push and
+# pull request. The Docker-tier suites (conformance, awscli, console) run
+# nightly because they pull images and take minutes.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make ci
+      - run: CGO_ENABLED=0 go build -trimpath -o bin/opens3 ./cmd/opens3

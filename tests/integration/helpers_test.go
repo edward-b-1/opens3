@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 
-	"gitlab.com/Birdsall/opens3/internal/server"
+	"github.com/edward-b-1/OpenS3/internal/server"
 )
 
 const (

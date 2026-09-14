@@ -54,6 +54,10 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 - `docs/ADMIN.md`, `docs/CONSOLE.md`, `docs/NOTIFICATIONS.md`
 - `GOVERNANCE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
+## Source, issues and releases
+
+https://github.com/edward-b-1/OpenS3
+
 ## Building
 
 Requires Go 1.27 or later.

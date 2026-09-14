@@ -25,7 +25,7 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
 
 ## Conventions
 
-- Module `gitlab.com/Birdsall/opens3`. Std library first; keep the
+- Module `github.com/edward-b-1/OpenS3`. Std library first; keep the
   dependency list short (bbolt, prometheus client, aws-sdk-go-v2 for tests).
 - Every S3 error must use an `s3err` code with the AWS HTTP status and
   message text; every XML response shape lives in `internal/s3api/xml*.go`.

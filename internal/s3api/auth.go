@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
-	"gitlab.com/Birdsall/opens3/internal/iam"
-	"gitlab.com/Birdsall/opens3/internal/meta"
-	"gitlab.com/Birdsall/opens3/internal/s3err"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/iam"
+	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/OpenS3/internal/s3err"
 )
 
 // authenticate verifies the request signature and resolves the identity.

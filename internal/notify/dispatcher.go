@@ -12,7 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"gitlab.com/Birdsall/opens3/internal/object"
+	"github.com/edward-b-1/OpenS3/internal/object"
 )
 
 // Dispatcher routes object events to targets.

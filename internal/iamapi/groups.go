@@ -1,6 +1,6 @@
 package iamapi
 
-import "gitlab.com/Birdsall/opens3/internal/iam"
+import "github.com/edward-b-1/OpenS3/internal/iam"
 
 func (h *Handler) groupShape(g *iam.Group) xmlGroup {
 	return xmlGroup{Path: pathOf(g.Path), GroupName: g.Name, GroupID: entityID("group", g.Name), Arn: h.groupARN(g.Name), CreateDate: iso(g.Created)}

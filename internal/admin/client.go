@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/auth/sigv4"
+	"github.com/edward-b-1/OpenS3/internal/auth/sigv4"
 )
 
 // Client calls the admin API with SigV4-signed requests. It is used by

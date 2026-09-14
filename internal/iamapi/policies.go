@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"gitlab.com/Birdsall/opens3/internal/iam"
+	"github.com/edward-b-1/OpenS3/internal/iam"
 )
 
 func (h *Handler) policyShape(p *iam.Policy, attachments int) xmlPolicy {

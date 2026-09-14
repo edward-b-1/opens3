@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/Birdsall/opens3/internal/sse"
+	"github.com/edward-b-1/OpenS3/internal/sse"
 )
 
 // Master is the ring of master keys that wrap everything else: named KMS

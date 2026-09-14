@@ -15,9 +15,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/Birdsall/opens3/internal/iam"
-	"gitlab.com/Birdsall/opens3/internal/kms"
-	"gitlab.com/Birdsall/opens3/internal/kv"
+	"github.com/edward-b-1/OpenS3/internal/iam"
+	"github.com/edward-b-1/OpenS3/internal/kms"
+	"github.com/edward-b-1/OpenS3/internal/kv"
 )
 
 func main() {
