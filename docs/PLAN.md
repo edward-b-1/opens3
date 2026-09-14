@@ -163,6 +163,14 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
   local server in Docker and regenerates `docs/CONFORMANCE.md`; the list of
   known-failing tests lives in `tests/s3tests/known-failures.txt` with a
   reason per entry and must only shrink.
+- `make awscli` — the AWS CLI v2 end-to-end suite (pinned `amazon/aws-cli`
+  image, one container per run) including transport scenarios; regenerates
+  `docs/AWSCLI.md`.
+- `make console-test` — ESLint and a Playwright browser smoke test of the
+  console in Docker (`make lint-js` for the lint alone).
+- `make rotation-test` — the master key rotation lifecycle in Docker:
+  server and `opens3 master` from the Dockerfile, encrypted records written
+  and verified by `examples/python/encrypted_data.py` across rotate, retire,
+  and moves between the key file and `OPENS3_MASTER_KEY`.
 - `go run ./tools/apicoverage` — regenerates `docs/API-COVERAGE.md`, the
   per-operation implementation matrix.
-- `tests/cli/run.sh` — smoke tests with the `aws` CLI and `mc` (if installed).

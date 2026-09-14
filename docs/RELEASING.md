@@ -26,7 +26,8 @@ Pinned versions (update deliberately, all in one commit): GoReleaser
 ## Cutting a release
 
 1. Start from a clean `main` with `make ci` green and, for a minor
-   release, `make conformance`, `make awscli` and `make console-test` run
+   release, `make conformance`, `make awscli`, `make console-test` and
+   `make rotation-test` run
    so `docs/CONFORMANCE.md` and `docs/AWSCLI.md` describe this version
    (`go run ./tools/apicoverage` for `docs/API-COVERAGE.md`).
 2. Update `CHANGELOG.md`: move the `[Unreleased]` entries into a new

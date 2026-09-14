@@ -16,6 +16,9 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
   regenerates docs/API-COVERAGE.md after router changes.
 - Console: `make console-test` (ESLint + Playwright browser smoke test in
   Docker, about a minute) must be run after any change to internal/console/static.
+- Master key: `make rotation-test` (Docker; server + `opens3 master` from
+  the Dockerfile, boto3 data via examples/python/encrypted_data.py, ~1 min)
+  after any change to internal/kms, internal/masterkey or cmd/opens3/master.go.
 - Subsystems wire themselves in via internal/server hooks
   (RegisterExtension/RegisterMount/RegisterStopper) from their own file in
   internal/server; do not grow server.go.

@@ -9,4 +9,5 @@ coverage.html
 .env
 /tests/awscli/results/
 /tests/console/results/
+/tests/rotation/results/
 /tests/console/.cache/

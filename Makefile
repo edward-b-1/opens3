@@ -63,6 +63,13 @@ conformance:
 awscli:
 	tests/awscli/run.sh
 
+# Master key rotation lifecycle (needs Docker): server and `opens3 master`
+# from the repository Dockerfile, data written and verified by
+# examples/python/encrypted_data.py in a python container.
+.PHONY: rotation-test
+rotation-test:
+	tests/rotation/run.sh
+
 # Compile the user manual (docs/manual/src/*.md) into docs/MANUAL.md.
 .PHONY: manual
 manual:

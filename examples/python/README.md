@@ -55,7 +55,8 @@ uv run encrypted_data.py --cleanup
 ```
 
 `--verify` completes the pending multipart upload, so run the script
-without flags again before a second rotation test. The manifest it writes
+without flags again before a second rotation test. `make rotation-test`
+at the repository root runs this whole lifecycle, and more, in Docker. The manifest it writes
 to `generated/` holds the SSE-C key and the IAM secret; `--cleanup`
 deletes it.
 

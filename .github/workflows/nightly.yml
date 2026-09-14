@@ -1,5 +1,6 @@
 # Nightly Docker-tier suites: Ceph s3-tests conformance, the AWS CLI
-# end-to-end suite and the console lint + browser test.
+# end-to-end suite, the console lint + browser test and the master key
+# rotation lifecycle.
 name: nightly
 on:
   schedule:
@@ -16,6 +17,7 @@ jobs:
       - run: make conformance
       - run: make awscli
       - run: make console-test
+      - run: make rotation-test
       - uses: actions/upload-artifact@v4
         if: always()
         with:

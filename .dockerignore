@@ -4,3 +4,10 @@ dist
 data
 tests/s3tests/s3-tests
 tests/s3tests/results
+tests/awscli/results
+tests/console/results
+tests/console/node_modules
+tests/rotation/results
+examples/python/.venv
+examples/python/generated
+examples/python/downloads

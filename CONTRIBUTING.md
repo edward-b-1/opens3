@@ -15,9 +15,11 @@ There is no CLA and no copyright assignment.
 ## Before you open a merge request
 
 - Run `make ci` (vet + race tests). It must pass.
-- If you touched the S3 API, add or update a conformance test in
-  `tests/integration` and, where possible, a recorded AWS exchange in
-  `tests/conformance/fixtures`.
+- If you touched the S3 API, add or update an integration test in
+  `tests/integration` and run `make conformance` and `make awscli`
+  (`tests/s3tests/known-failures.txt` may only shrink).
+- If you touched the console, run `make console-test`; if you touched key
+  wrapping (`internal/kms`, `internal/masterkey`), run `make rotation-test`.
 - If you touched the on-disk layout, update `docs/FORMAT.md` and bump the
   format version.
 - Keep the dependency list short; prefer the standard library.

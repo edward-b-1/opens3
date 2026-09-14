@@ -73,7 +73,8 @@ Move an item to "Done" with the commit that closed it.
   access-key secrets and SSE-S3 data keys of objects and multipart
   uploads; moves between the key file and `OPENS3_MASTER_KEY` in either
   direction. Older keys stay in the ring until `retire` so pre-rotation
-  metadata backups remain restorable.
+  metadata backups remain restorable. `make rotation-test` runs the whole
+  lifecycle in Docker against boto3-written encrypted data.
 
 - Console lint (`make lint-js`, ESLint no-undef) and Playwright smoke test
   (`make console-test`, Chromium/Firefox/WebKit, fails on any page error).
