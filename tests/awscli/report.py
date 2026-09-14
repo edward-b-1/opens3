@@ -25,7 +25,7 @@ import os
 import re
 import sys
 
-SERVICES = ["s3", "s3api", "iam", "sts"]
+SERVICES = ["s3", "s3api", "iam", "sts", "transport"]
 # Client-side commands that make no request of their own.
 CLIENT_SIDE = {"help", "wizard"}
 
@@ -157,7 +157,9 @@ def write_markdown(path, cases, matrix, help_lists, args):
     for svc, rows in matrix.items():
         lines.append(f"## aws {svc}")
         lines.append("")
-        if not help_lists.get(svc):
+        if svc == "transport":
+            lines.append("Scenarios rather than commands: the CLI against a TLS server and a plain server with matching and mismatching endpoint schemes, and the browser side of the TLS port (`tests/awscli/transport.sh`).")
+        elif not help_lists.get(svc):
             lines.append(f"(`aws {svc} help` output missing — command list taken from the results only)")
             lines.append("")
         lines.append("| Command | Status | Cases |")

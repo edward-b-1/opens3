@@ -68,3 +68,14 @@ used it passed, **failed** when any did, **expected-unsupported** when only
 - `results/` (git-ignored): `results.tsv`, `cases/`, `help-*.txt`,
   `version.txt`, `suite.log`, `server.log`, the built binary.
 - `docs/AWSCLI.md`: the generated report.
+
+## Transport scenarios
+
+After the main suite, `run.sh` starts a second server with a self-signed
+certificate and runs `transport.sh`: the CLI over `https://` with and
+without trusting the certificate, `http://` against the TLS port (must
+produce a parsed `InvalidRequest` error naming the https URL, not a
+redirect loop), `https://` against the plain server, and the browser side
+of the TLS port (console redirect, HTTPS console, HSTS). Results appear in
+`docs/AWSCLI.md` under "aws transport". Shared assertion helpers live in
+`lib.sh`.

@@ -123,6 +123,55 @@ else
   rm -rf "$SCRATCH"
 fi
 set -e
+
+# --- 3b. transport scenarios ----------------------------------------------------
+# A second server with a self-signed certificate; transport.sh runs the CLI
+# against it and against the plain server with matching and mismatching
+# schemes, appending to the same results file.
+TLS_DIR="$RESULTS/tls"
+mkdir -p "$TLS_DIR"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout "$TLS_DIR/tls.key" -out "$TLS_DIR/tls.crt" 2>/dev/null
+TLS_PORT=""
+for _ in $(seq 1 50); do
+  p=$((20000 + RANDOM % 20000))
+  [ "$p" = "$PORT" ] && continue
+  if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then TLS_PORT=$p; break; fi
+done
+TLS_DATA="$(mktemp -d "${TMPDIR:-/tmp}/opens3-awscli-tls.XXXXXX")"
+OPENS3_TLS_CERT="$TLS_DIR/tls.crt" OPENS3_TLS_KEY="$TLS_DIR/tls.key" \
+  "$BIN" server --root "$TLS_DATA/data" --address "127.0.0.1:$TLS_PORT" --no-fsync --log-level "${AWSCLI_LOG_LEVEL:-warn}" >"$RESULTS/server-tls.log" 2>&1 &
+TLS_PID=$!
+for _ in $(seq 1 100); do
+  if curl -fs --cacert "$TLS_DIR/tls.crt" "https://127.0.0.1:$TLS_PORT/opens3/health/ready" >/dev/null 2>&1; then break; fi
+  kill -0 "$TLS_PID" 2>/dev/null || { log "tls server exited early:"; cat "$RESULTS/server-tls.log" >&2; exit 1; }
+  sleep 0.1
+done
+log "tls server listening on 127.0.0.1:$TLS_PORT"
+set +e
+if [ "$MODE" = native ]; then
+  SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/opens3-awscli-scratch.XXXXXX")"
+  env "${CLI_ENV[@]}" PLAIN_PORT="$PORT" TLS_PORT="$TLS_PORT" TLS_CA="$TLS_DIR/tls.crt" \
+    AWS_BIN="$AWS_BIN" AWSCLI_OUT="$RESULTS" AWSCLI_SCRATCH="$SCRATCH" \
+    bash "$HERE/transport.sh" 2>&1 | tee -a "$RESULTS/suite.log"
+  TRANSPORT_STATUS=${PIPESTATUS[0]}
+  rm -rf "$SCRATCH"
+else
+  SCRATCH="$RESULTS/scratch"
+  mkdir -p "$SCRATCH"
+  docker run --rm --network host --user "$(id -u):$(id -g)" \
+    -v "$HERE:/suite:ro" -v "$RESULTS:/out" -v "$SCRATCH:/scratch" \
+    "${ENV_ARGS[@]}" -e PLAIN_PORT="$PORT" -e TLS_PORT="$TLS_PORT" -e TLS_CA=/out/tls/tls.crt \
+    -e HOME=/scratch -e AWS_BIN=aws -e AWSCLI_OUT=/out -e AWSCLI_SCRATCH=/scratch \
+    --entrypoint bash "$AWSCLI_IMAGE" /suite/transport.sh 2>&1 | tee -a "$RESULTS/suite.log"
+  TRANSPORT_STATUS=${PIPESTATUS[0]}
+  rm -rf "$SCRATCH"
+fi
+set -e
+kill "$TLS_PID" 2>/dev/null || true
+wait "$TLS_PID" 2>/dev/null || true
+rm -rf "$TLS_DATA"
+[ "$TRANSPORT_STATUS" -eq 0 ] || SUITE_STATUS=$TRANSPORT_STATUS
 DURATION=$(( $(date +%s) - START ))
 log "suite finished in ${DURATION}s (exit $SUITE_STATUS)"
 
