@@ -19,6 +19,44 @@ Do not report security issues in public issues or pull requests.
    for anything that affects confidentiality, integrity or availability.
 4. The reporter is credited unless they ask not to be.
 
+## Advisories
+
+### OPENS3-2026-001: authorisation weaknesses in v0.1.0
+
+**Affected:** v0.1.0. **Fixed in:** v0.1.1. Upgrade; there is no
+configuration-only mitigation for the first two items.
+
+A code review of v0.1.0 found these authorisation defects, all fixed in
+v0.1.1 (`CHANGELOG.md`, section 0.1.1, lists every change):
+
+1. **Credentials narrowed by a session policy could escalate.** A service
+   account key carrying a session policy, or an STS session created with
+   one, could create a permanent access key or a console password for its
+   user through the IAM API without any permission check, obtaining the
+   user's full rights. A session derived from root could mint a permanent
+   administrative key. Deployments that use only root and full-rights
+   users are not affected.
+2. **Unsigned headers were honoured on signed requests.** The holder of a
+   presigned upload URL could add `x-amz-copy-source` to copy any object
+   the signer could read into the destination, or add ACL and tagging
+   headers. Deployments that hand out presigned URLs to untrusted parties
+   are affected.
+3. **Policy evaluation gaps.** Negated condition operators did not match
+   when the key was absent; policy resource ARNs normalised `..` and
+   repeated slashes in object keys; attribute headers on uploads bypassed
+   their own permissions; copy sources were authorised without their
+   tags; batch delete required a bucket-level permission.
+4. **Forwarded headers were trusted from any client**, so a plain-HTTP
+   client could satisfy `aws:SecureTransport`, and SSE-C keys were
+   accepted over plain HTTP. v0.1.1 introduces `OPENS3_TRUSTED_PROXIES`.
+5. **Two races and a lifecycle guard**: a part re-uploaded during
+   multipart completion could corrupt the object; deleting and recreating
+   a bucket could lose new files; lifecycle expiry could delete a fresh
+   same-content replacement.
+
+Object files were also created world-readable on the host; v0.1.1
+creates them owner-only (existing files are not changed).
+
 ## Supported versions
 
 Each minor release receives security fixes for at least twelve months after

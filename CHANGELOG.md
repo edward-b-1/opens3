@@ -13,10 +13,16 @@ tagged tree.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-14
+
+Security release: see advisory OPENS3-2026-001 in `SECURITY.md`. The
+on-disk format gains an optional `del` flag on bucket records (readable
+by v0.1.0, which ignores it) and object files are now created owner-only.
+
 ### Security
 
 Fixes for findings of a code review of v0.1.0. Upgrade if you run v0.1.0
-with more than one identity.
+with more than one identity or hand out presigned URLs.
 
 - Credentials narrowed by a session policy (service accounts with one,
   STS sessions created with or derived under one) could create a
@@ -164,5 +170,6 @@ scenarios.
   targets other than webhooks (phase 2).
 - DSSE-KMS is accepted and treated as SSE-KMS (single layer).
 
-[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/edward-b-1/opens3/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/edward-b-1/opens3/releases/tag/v0.1.0
