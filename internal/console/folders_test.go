@@ -114,3 +114,38 @@ func TestFolderDeleteAndZip(t *testing.T) {
 		t.Fatalf("not purged: %v", out["entries"])
 	}
 }
+
+func TestBucketDefaultEncryption(t *testing.T) {
+	e := newEnv(t)
+	e.mustLogin(e.c, rootUser, rootPass)
+	e.do(e.c, "POST", "/console/api/buckets", map[string]any{"name": "encb"}, nil)
+	if resp, out := e.do(e.c, "PUT", "/console/api/buckets/encb/encryption", map[string]any{"algorithm": "aws:kms", "kmsKeyId": "nope"}, nil); resp.StatusCode != 400 {
+		t.Fatalf("unknown key: %d %v", resp.StatusCode, out)
+	}
+	e.do(e.c, "POST", "/console/api/kms/keys", map[string]any{"id": "payroll"}, nil)
+	if resp, out := e.do(e.c, "PUT", "/console/api/buckets/encb/encryption", map[string]any{"algorithm": "aws:kms", "kmsKeyId": "payroll"}, nil); resp.StatusCode != 200 {
+		t.Fatalf("set: %d %v", resp.StatusCode, out)
+	}
+	_, det := e.do(e.c, "GET", "/console/api/buckets/encb", nil, nil)
+	enc, _ := det["encryption"].(map[string]any)
+	if enc == nil || enc["kmsKeyId"] != "payroll" {
+		t.Fatalf("detail: %v", det)
+	}
+	req, _ := http.NewRequest("PUT", e.ts.URL+"/console/api/buckets/encb/upload?key=doc", strings.NewReader("secret"))
+	req.Header.Set(console.CSRFHeader, "1")
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, _ := e.c.Do(req)
+	resp.Body.Close()
+	_, obj := e.do(e.c, "GET", "/console/api/buckets/encb/object?key=doc", nil, nil)
+	sse, _ := obj["sse"].(map[string]any)
+	if sse == nil || sse["type"] != "aws:kms" || sse["kmsKeyId"] != "payroll" {
+		t.Fatalf("uploaded object not encrypted with the bucket default: %v", obj)
+	}
+	if resp, _ := e.do(e.c, "PUT", "/console/api/buckets/encb/encryption", map[string]any{"algorithm": ""}, nil); resp.StatusCode != 200 {
+		t.Fatal("clear")
+	}
+	_, det = e.do(e.c, "GET", "/console/api/buckets/encb", nil, nil)
+	if _, has := det["encryption"]; has && det["encryption"] != nil {
+		t.Fatalf("still set: %v", det["encryption"])
+	}
+}

@@ -143,3 +143,11 @@ instantly through CSS; the other settings re-render the current page.
 - API credentials are always **generated**: a 20-character access key ID
   and a 40-character secret, shown once. The console never lets anyone
   choose either value. Rotating a key generates a new secret.
+
+## Default encryption
+
+A bucket's settings page has a "Default encryption" card: none (objects
+are stored as uploaded, the default), SSE-S3 (the server master key) or
+SSE-KMS with a named encryption key from the Encryption keys page. It
+applies to objects uploaded without explicit encryption headers; existing
+objects are unchanged. This is the same setting as `PutBucketEncryption`.

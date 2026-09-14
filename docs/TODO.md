@@ -51,16 +51,10 @@ Move an item to "Done" with the commit that closed it.
    striping, bitrot detection, healing and disk-failure handling. Start
    only on a released, tested base.
 
-8. **Bucket default encryption in the console.** Both the AWS and MinIO
-   consoles let an administrator set a bucket's default encryption
-   (SSE-S3, or SSE-KMS with a named key); ours only displays it. Add the
-   setting to the bucket settings page (calls the existing
-   PutBucketEncryption path). Decision (13 Sep 2026): objects are NOT
-   encrypted by default; encryption is explicit per request or per bucket.
-9. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
+8. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
    `aws:kms`; either implement the second AES layer or reject the value.
 
-10. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
+9. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
     stopped) adds a new key to the ring; `opens3 master-key rewrap` re-wraps
     every stored secret, KMS key and SSE-S3 data key under the newest key so
     old keys can be dropped. Later: an external key service (Vault or
@@ -74,6 +68,9 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- Console: bucket default encryption (none / SSE-S3 / SSE-KMS with a
+  named key). Decision: objects are not encrypted by default.
 
 - AWS IAM Query API on the S3 endpoint (`docs/IAM-API.md`): users, access
   keys, groups, policies, attachments, login profiles, account summary,

@@ -123,6 +123,7 @@ func (h *Handler) routes() {
 	api("DELETE /console/api/buckets/{bucket}", h.deleteBucket)
 	api("PUT /console/api/buckets/{bucket}/versioning", h.putVersioning)
 	api("PUT /console/api/buckets/{bucket}/tags", h.putBucketTags)
+	api("PUT /console/api/buckets/{bucket}/encryption", h.putBucketEncryption)
 	api("GET /console/api/buckets/{bucket}/policy", h.getPolicy)
 	api("PUT /console/api/buckets/{bucket}/policy", h.putPolicy)
 	api("DELETE /console/api/buckets/{bucket}/policy", h.deletePolicy)

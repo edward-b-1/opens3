@@ -85,6 +85,27 @@ views.bucketSettings = async function (main, name) {
       },
     }, 'Apply')));
 
+  // Default encryption.
+  const cur = b.encryption || {};
+  const esel = h('select', ['', 'AES256', 'aws:kms'].map((v) => h('option', { value: v, selected: (cur.algorithm || '') === v }, v === '' ? 'None (store objects as uploaded)' : v === 'AES256' ? 'SSE-S3 (server master key)' : 'SSE-KMS (named encryption key)')));
+  const ekey = h('input.input', { list: 'kms-keys', placeholder: 'opens3-default-key', value: cur.kmsKeyId || '', spellcheck: false });
+  const klist = h('datalist#kms-keys');
+  if (app.me.admin) api.get('kms/keys').then((r) => (r.keys || []).forEach((k) => klist.append(h('option', { value: k.id })))).catch(() => {});
+  const keyRow = h('div', { style: 'margin-top:8px' }, field('Encryption key', ekey, 'Leave empty to use opens3-default-key. Keys are managed on the Encryption keys page.'), klist);
+  const syncEnc = () => { keyRow.hidden = esel.value !== 'aws:kms'; };
+  esel.addEventListener('change', syncEnc); syncEnc();
+  const encryption = h('div.card', h('h2', 'Default encryption'),
+    h('p.muted', 'Applied to every object uploaded without explicit encryption headers. Existing objects are not changed. Objects encrypted with a named key become unreadable if that key is deleted.'),
+    h('div', { style: 'max-width:360px' }, esel), keyRow,
+    h('div.row', { style: 'margin-top:10px' }, h('button.btn', {
+      onClick: async () => {
+        try {
+          await api.put('buckets/' + encodeURIComponent(name) + '/encryption', { algorithm: esel.value, kmsKeyId: esel.value === 'aws:kms' ? ekey.value.trim() : '' });
+          toast(esel.value ? 'Default encryption set' : 'Default encryption removed', 'success');
+        } catch (e) { error(e); }
+      },
+    }, 'Apply')));
+
   // Tags.
   const tags = tagsField(b.tags);
   const tagsCard = h('div.card', h('h2', 'Tags'), tags, h('div.row', h('button.btn', {
@@ -128,5 +149,5 @@ views.bucketSettings = async function (main, name) {
       },
     }, 'Delete bucket'));
 
-  main.append(crumbs, h('h1', name), h('div.grid', { style: 'grid-template-columns: repeat(auto-fit, minmax(360px, 1fr))' }, overview, versioning, tagsCard), policyCard, danger);
+  main.append(crumbs, h('h1', name), h('div.grid', { style: 'grid-template-columns: repeat(auto-fit, minmax(360px, 1fr))' }, overview, versioning, encryption, tagsCard), policyCard, danger);
 };

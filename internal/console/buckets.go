@@ -179,6 +179,45 @@ func (h *Handler) putVersioning(w http.ResponseWriter, r *http.Request, s *sessi
 	return nil
 }
 
+// putBucketEncryption sets or clears the bucket's default encryption
+// (what the AWS console calls "default encryption" under bucket properties
+// and MinIO's console exposed under bucket settings).
+func (h *Handler) putBucketEncryption(w http.ResponseWriter, r *http.Request, s *session) error {
+	var in struct {
+		Algorithm string `json:"algorithm"` // "" (none) | AES256 | aws:kms
+		KMSKeyID  string `json:"kmsKeyId"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		return err
+	}
+	var rule *meta.EncryptionRule
+	switch in.Algorithm {
+	case "":
+	case "AES256":
+		if in.KMSKeyID != "" {
+			return badRequest("a KMS key applies only to aws:kms")
+		}
+		rule = &meta.EncryptionRule{Algorithm: "AES256"}
+	case "aws:kms":
+		if in.KMSKeyID != "" && !h.d.KMS.KeyExists(in.KMSKeyID) {
+			return badRequest("encryption key " + in.KMSKeyID + " does not exist")
+		}
+		rule = &meta.EncryptionRule{Algorithm: "aws:kms", KMSKeyID: in.KMSKeyID}
+	default:
+		return badRequest("algorithm must be empty, AES256 or aws:kms")
+	}
+	b, err := h.loadBucket(r, s, "s3:PutEncryptionConfiguration")
+	if err != nil {
+		return err
+	}
+	b, err = h.d.Obj.UpdateBucket(r.Context(), b.Name, func(b *meta.Bucket) error { b.Encryption = rule; return nil })
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"bucket": summarize(b, s), "encryption": b.Encryption})
+	return nil
+}
+
 func (h *Handler) putBucketTags(w http.ResponseWriter, r *http.Request, s *session) error {
 	var in struct {
 		Tags []struct{ Key, Value string } `json:"tags"`
