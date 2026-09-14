@@ -22,19 +22,6 @@ Move an item to "Done" with the commit that closed it.
       certificate first; DNS-01 providers later if needed.
    5. Mutual TLS (client certificates), later.
 
-2. **First tagged release (`v0.1.0`).** The tooling promised by
-   GOVERNANCE.md section 4 is in place: `.goreleaser.yaml` (GoReleaser v2:
-   static `-trimpath` builds for linux/darwin amd64/arm64 and linux/armv7
-   with the commit timestamp for reproducibility, tar.gz archives,
-   SHA-256 checksums, SPDX SBOMs, keyless cosign signature on the
-   checksums file, multi-arch `ghcr.io/edward-b-1/opens3` image signed
-   keylessly), `.github/workflows/release.yml` (`make ci` gate, then
-   `goreleaser release` on `v*` tags), `make release-check` /
-   `make release-snapshot`, `CHANGELOG.md`, `docs/RELEASING.md`, install
-   and verification instructions in README.md and the manual. Remaining:
-   review the changes, then tag `v0.1.0` and push the tag
-   (`docs/RELEASING.md`), which runs signing and publishing for the first
-   time; verify the published assets and image from another machine.
 3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
    without the server: walk the metadata, verify every referenced blob
    exists with the right size (and checksum where stored), report orphan
@@ -67,6 +54,13 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- **v0.1.0 released** (14 Sep 2026): the GoReleaser workflow ran on a
+  rehearsal tag first (`v0.0.1-rc1`, tag deleted afterwards) and then on
+  `v0.1.0`; archives, checksums, SBOMs, the keyless checksums signature
+  and the signed multi-arch `ghcr.io/edward-b-1/opens3` image were
+  verified with cosign from a download. Pre-release tags are marked as
+  such and do not move the image's `latest` tag.
 
 - Master key rotation: `opens3 master status | rotate | rewrap | retire`
   (server stopped) with re-wrapping of the key-check value, named keys,
