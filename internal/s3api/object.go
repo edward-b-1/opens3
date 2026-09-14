@@ -322,13 +322,16 @@ func (s *Server) copyObject(c *reqCtx) error {
 	}
 	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContextFor(c, srcBucket),
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
+	// The copy reads exactly the bucket incarnation and, when it exists at
+	// this point, the object version authorised here.
 	so, soErr := s.obj.StatObject(r.Context(), sb, sk, sv)
 	if soErr == nil {
 		applyObjectContext(&srcReq, so)
-		// The copy reads exactly the version authorised here.
-		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), srcBucket, so))
-		r = c.r
+	} else {
+		so = nil
 	}
+	c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), srcBucket, so))
+	r = c.r
 	if !s.iam.Authorize(srcReq) {
 		return errAccessDenied()
 	}
