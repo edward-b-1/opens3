@@ -3,7 +3,7 @@
 ## Requirements
 
 - Linux or macOS, x86-64 or ARM64. One directory on a local filesystem for
-  the data root; OpenS3 keeps everything there (`../FORMAT.md`).
+  the data root; OpenS3 keeps everything there (chapter 8 shows the layout).
 - Go 1.27 or later to build from source. Docker is optional (used for the
   container image and the conformance test suites).
 

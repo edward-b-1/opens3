@@ -32,8 +32,9 @@ ordinary SSE-KMS.
 The master key wraps every SSE-S3 data key, every named encryption key,
 and every stored access-key secret. It is generated on first start as 32
 random bytes in `<root>/meta/master.keys`, a file readable only by the
-server's user. Rotation is planned as adding a key to that file; older keys
-stay to unwrap older data.
+server's user. The file can hold several keys: the newest one is used for
+new data and older ones remain able to read older data, which is how a key
+will be rotated (a rotation command is not in this version).
 
 Alternatively set `OPENS3_MASTER_KEY` to at least 32 characters of random
 material, for example from a secret manager injected at boot. The server
@@ -101,8 +102,9 @@ credited with more than it delivers:
   the environment, the whole data directory.
 - It does not protect against an attacker who controls the running server,
   who has the keys. That is equally true of AWS; AWS's advantage is that
-  its keys live in a separate audited service. An external key service for
-  OpenS3 is planned.
+  its keys live in a separate audited service. This version has no
+  external key service; keep the master key out of the data directory
+  with `OPENS3_MASTER_KEY` if that matters to you.
 - Deleting a named key destroys its data everywhere at once, which no
   amount of disk scrubbing achieves.
 - SSE-C protects even against the server, at the cost of the client

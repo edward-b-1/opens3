@@ -88,8 +88,8 @@ bucket's configuration, and matching responses carry the CORS headers.
 Website, logging, replication, inventory, metrics, analytics, accelerate
 and request-payment configurations are stored and returned exactly as
 written, so tooling that sets them succeeds, but they have no effect yet:
-there is no website endpoint, no log delivery and no replication worker.
-`../API-COVERAGE.md` marks these "partial".
+there is no website endpoint, no log delivery and no replication worker in
+this version.
 
 ## Public access and ACLs
 

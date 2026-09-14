@@ -1,8 +1,8 @@
 # 3. Identity and access
 
-OpenS3 follows the AWS model. `../IAM.md` explains signing and policy
-evaluation from first principles; `../IAM-API.md` lists the IAM API. This
-chapter is the practical view.
+OpenS3 follows the AWS model: the same identities, the same request
+signing (Signature Version 4) and the same policy language, so the AWS
+CLI, the AWS SDKs and policies written for AWS work unchanged.
 
 ## The pieces
 
@@ -37,7 +37,7 @@ policies and an optional console password, and shows the generated key
 pair once.
 
 With the bundled CLI: `opens3 admin user add alice --policy readonly --password '...'`
-(see `../ADMIN.md`).
+(chapter 8).
 
 ## Writing policies
 
@@ -98,6 +98,39 @@ aws sts assume-role --role-arn arn:aws:iam::000000000000:role/any --role-session
 narrowed by the optional policy. Use the returned key, secret and session
 token together; a session token with the wrong key is rejected. Expired
 sessions are refused on use and swept hourly.
+
+## The IAM commands that work
+
+Everything below is available through `aws iam`, boto3's `iam` client and
+Terraform. Roles, MFA, identity providers, server certificates and policy
+versions beyond `v1` are not part of OpenS3 and return `InvalidAction`.
+
+| Area | Commands |
+|---|---|
+| Users | create-user, get-user, list-users, update-user (no renaming), delete-user |
+| Access keys | create-access-key, list-access-keys, update-access-key (Active/Inactive), delete-access-key |
+| Console passwords | create-login-profile, get-login-profile, update-login-profile, delete-login-profile, change-password |
+| Groups | create-group, get-group, list-groups, delete-group, add-user-to-group, remove-user-from-group, list-groups-for-user |
+| Policies | create-policy, get-policy, get-policy-version, list-policies (`--scope AWS` lists the built-in ones), delete-policy |
+| Attachments | attach-user-policy, detach-user-policy, list-attached-user-policies, attach-group-policy, detach-group-policy, list-attached-group-policies |
+| Account | get-account-summary; `aws sts get-caller-identity`, `aws sts assume-role` |
+
+Policy ARNs are `arn:aws:iam::<account>:policy/<name>` for policies you
+create and `arn:aws:iam::aws:policy/<name>` for the built-in ones; a bare
+name is accepted wherever an ARN is expected. Deleting follows AWS's
+order: a user with keys, a console password, group memberships or attached
+policies, and a policy that is attached, return `DeleteConflict` until
+those are removed.
+
+The built-in policies:
+
+| Name | Grants |
+|---|---|
+| `readonly` | Get, head and list on every bucket and object |
+| `readwrite` | Every `s3:` action on every bucket |
+| `writeonly` | Put objects and manage multipart uploads, no reads |
+| `diagnostics` | Server info, health and metrics |
+| `consoleAdmin` | Every `s3:`, `iam:`, `kms:`, `sts:` and `opens3:` action: a full administrator |
 
 ## Users managing themselves
 

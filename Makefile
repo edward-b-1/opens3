@@ -41,3 +41,8 @@ conformance:
 .PHONY: awscli
 awscli:
 	tests/awscli/run.sh
+
+# Compile the user manual (docs/manual/src/*.md) into docs/MANUAL.md.
+.PHONY: manual
+manual:
+	docs/manual/build.sh

@@ -2,7 +2,13 @@
 
 The console is at `/console/` on the server's address. It is built into
 the binary, needs no separate service, and every action goes through the
-same authorisation as the API. `../CONSOLE.md` has the security details.
+same authorisation as the API.
+
+How it stays safe: signing in creates a temporary credential and stores
+only that in a browser cookie that scripts cannot read; every request is
+checked against the cookie and against a header that other websites cannot
+set, so a malicious page cannot act on your behalf; and the console never
+receives or displays a secret except at the moment a key is created.
 
 ## Signing in
 

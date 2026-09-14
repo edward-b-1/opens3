@@ -65,8 +65,9 @@ chmod 600 tls.key
 Clients then need to trust it: import `tls.crt` into the operating system
 trust store, or pass it explicitly (`aws --ca-bundle tls.crt`, boto3
 `verify="tls.crt"`, `curl --cacert tls.crt`). For a public host name use a
-certificate from a public authority; automatic issuance is planned
-(`../TODO.md`).
+certificate from a public authority (Let's Encrypt or your own CA). This
+version does not obtain or renew certificates itself; a reverse proxy that
+does is a common arrangement.
 
 ## Virtual-host addressing
 
@@ -83,7 +84,7 @@ Everything is served on the one address:
 |---|---|
 | `/` and `/<bucket>/...` | S3 API; also the IAM and STS Query APIs (POST to `/`) |
 | `/console/` | Web console |
-| `/opens3/admin/v1/` | Admin JSON API (`../ADMIN.md`) |
+| `/opens3/admin/v1/` | Admin JSON API used by `opens3 admin` (chapter 8) |
 | `/opens3/health/live`, `/opens3/health/ready` | Health probes (200, empty body) |
 | `/opens3/metrics` | Prometheus metrics |
 

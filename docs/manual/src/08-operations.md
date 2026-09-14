@@ -2,7 +2,7 @@
 
 ## What is on disk
 
-Everything is under the data root (`../FORMAT.md` is the contract):
+Everything is under the data root:
 
 | Path | Contents |
 |---|---|
@@ -41,7 +41,7 @@ mismatch is refused at start.
 
 Stop, replace the binary, start. The on-disk format is versioned; a
 release that changes it says so in its notes and reads the previous
-version (`../GOVERNANCE.md`). The console's assets are inside the binary
+version. The console's assets are inside the binary
 and browsers revalidate them on each load, so a normal reload picks up the
 new version.
 
@@ -63,7 +63,7 @@ Structured log lines on stderr (`--log-json` for JSON). At `info` you see
 startup (address, master key fingerprint), console logins and failures,
 plain-HTTP redirects, lifecycle and purge activity, and TLS handshake
 problems reported by clients. `--log-level debug` adds per-request detail.
-An audit log of every API request is planned.
+This version has no separate audit log.
 
 ## Housekeeping that runs by itself
 
@@ -76,8 +76,21 @@ An audit log of every API request is planned.
 
 ## Administration without the console
 
-`opens3 admin` talks to the admin JSON API with the root (or an
-administrator's) access key: users, keys, groups, policies, buckets
-(including forced deletion), encryption keys, server info. `../ADMIN.md`
-lists commands and endpoints. Anything AWS tooling can do, it should do
-through `aws iam` (chapter 3).
+`opens3 admin` talks to the server with the root (or an administrator's)
+access key, taken from `--access-key`/`--secret-key`, or from
+`OPENS3_ACCESS_KEY`/`OPENS3_SECRET_KEY`, or from the root variables. The
+endpoint comes from `--endpoint` or `OPENS3_ENDPOINT` (default
+`http://localhost:9000`). `--json` prints raw JSON.
+
+| Command | What it does |
+|---|---|
+| `info`, `health` | Version, uptime, bucket and object counts, disk usage; readiness |
+| `user list \| info NAME \| add NAME [--policy p1,p2] [--password P] [--no-key] \| rm \| enable \| disable \| policy NAME [p1,p2] \| password NAME (--password P \| --clear)` | Users. `add` prints the generated key pair once |
+| `key list [--user U] \| add USER [--service] [--policy-file F] [--expires DUR] \| rm AK \| enable AK \| disable AK \| rotate AK` | Access keys and service accounts |
+| `group list \| info \| add NAME [--members u1,u2] [--policy p1] \| rm \| members NAME [--add u] [--remove u]` | Groups |
+| `policy list \| get NAME \| set NAME FILE \| rm NAME` | Policies (`FILE` may be `-` for stdin) |
+| `bucket list [--usage] \| rm NAME [--force]` | Buckets; `--force` deletes contents too |
+| `kms list \| add ID \| rm ID` | Named encryption keys |
+
+Anything AWS tooling can do, do through `aws iam` (chapter 3); the
+bundled CLI exists for what AWS has no command for.
