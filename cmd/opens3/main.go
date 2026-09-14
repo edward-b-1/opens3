@@ -109,7 +109,10 @@ func runServer(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	cfg = server.ConfigFromEnv(cfg)
+	// Flags typed for this invocation win over OPENS3_* variables.
+	explicit := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	cfg = server.ConfigFromEnv(cfg, explicit)
 	var lvl slog.Level
 	if err := lvl.UnmarshalText([]byte(*logLevel)); err != nil {
 		lvl = slog.LevelInfo

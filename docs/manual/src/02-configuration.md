@@ -1,7 +1,9 @@
 # 2. Configuration
 
 There is no configuration file. Settings come from command-line flags and
-`OPENS3_*` environment variables; the environment wins when both are set.
+`OPENS3_*` environment variables. A flag typed on the command line wins
+over the variable of the same setting; a variable wins over the flag's
+default.
 
 ## Server flags
 

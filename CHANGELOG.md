@@ -13,6 +13,12 @@ tagged tree.
 
 ## [Unreleased]
 
+### Changed
+
+- A flag given on the command line now takes precedence over the
+  `OPENS3_*` variable for the same setting (it was the other way round).
+  Variables still override flag defaults.
+
 ### Added
 
 - `--tls self-signed` (`OPENS3_TLS=self-signed`): the server generates a

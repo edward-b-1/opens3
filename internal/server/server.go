@@ -339,23 +339,33 @@ func (s *Server) Close() error {
 	return err
 }
 
-// ConfigFromEnv fills unset fields from OPENS3_* environment variables.
-func ConfigFromEnv(cfg Config) Config {
+// ConfigFromEnv applies OPENS3_* environment variables to cfg. A setting
+// given on the command line wins over the environment: explicit holds
+// the flag names the user typed (from flag.FlagSet.Visit), and the
+// variable that corresponds to such a flag is ignored.
+func ConfigFromEnv(cfg Config, explicit map[string]bool) Config {
 	get := func(k, def string) string {
 		if v := os.Getenv("OPENS3_" + k); v != "" {
 			return v
 		}
 		return def
 	}
+	// flagged is get for settings that also have a flag.
+	flagged := func(k, flagName, def string) string {
+		if explicit[flagName] {
+			return def
+		}
+		return get(k, def)
+	}
 	cfg.RootUser = get("ROOT_USER", cfg.RootUser)
 	cfg.RootPassword = get("ROOT_PASSWORD", cfg.RootPassword)
 	cfg.MasterKey = get("MASTER_KEY", cfg.MasterKey)
-	cfg.Region = get("REGION", cfg.Region)
-	cfg.Address = get("ADDRESS", cfg.Address)
-	cfg.Root = get("ROOT", cfg.Root)
-	cfg.TLS = get("TLS", cfg.TLS)
-	cfg.TLSCert = get("TLS_CERT", cfg.TLSCert)
-	cfg.TLSKey = get("TLS_KEY", cfg.TLSKey)
+	cfg.Region = flagged("REGION", "region", cfg.Region)
+	cfg.Address = flagged("ADDRESS", "address", cfg.Address)
+	cfg.Root = flagged("ROOT", "root", cfg.Root)
+	cfg.TLS = flagged("TLS", "tls", cfg.TLS)
+	cfg.TLSCert = flagged("TLS_CERT", "tls-cert", cfg.TLSCert)
+	cfg.TLSKey = flagged("TLS_KEY", "tls-key", cfg.TLSKey)
 	if v := get("NO_HSTS", ""); v == "1" || strings.EqualFold(v, "true") {
 		cfg.NoHSTS = true
 	}
