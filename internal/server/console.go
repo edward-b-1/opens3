@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/edward-b-1/OpenS3/internal/console"
+	"github.com/edward-b-1/opens3/internal/console"
 )
 
 // Version is reported by the console; cmd/opens3 may set it at start-up.

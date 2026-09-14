@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/checksum"
-	"github.com/edward-b-1/OpenS3/internal/meta"
-	"github.com/edward-b-1/OpenS3/internal/object"
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/checksum"
+	"github.com/edward-b-1/opens3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 const maxXMLBody = 20 << 20

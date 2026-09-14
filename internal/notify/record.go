@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/object"
+	"github.com/edward-b-1/opens3/internal/object"
 )
 
 // Message is the JSON document delivered to a target: the AWS S3 event

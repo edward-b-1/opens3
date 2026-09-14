@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 func errInternal() *s3err.Error { return s3err.New(s3err.InternalError) }

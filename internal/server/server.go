@@ -20,12 +20,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/edward-b-1/OpenS3/internal/blob"
-	"github.com/edward-b-1/OpenS3/internal/iam"
-	"github.com/edward-b-1/OpenS3/internal/kms"
-	"github.com/edward-b-1/OpenS3/internal/kv"
-	"github.com/edward-b-1/OpenS3/internal/object"
-	"github.com/edward-b-1/OpenS3/internal/s3api"
+	"github.com/edward-b-1/opens3/internal/blob"
+	"github.com/edward-b-1/opens3/internal/iam"
+	"github.com/edward-b-1/opens3/internal/kms"
+	"github.com/edward-b-1/opens3/internal/kv"
+	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/s3api"
 )
 
 // Config is the server configuration.

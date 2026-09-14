@@ -13,7 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/admin"
+	"github.com/edward-b-1/opens3/internal/admin"
 )
 
 func init() { admin.Version = version }

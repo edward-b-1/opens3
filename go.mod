@@ -1,4 +1,4 @@
-module github.com/edward-b-1/OpenS3
+module github.com/edward-b-1/opens3
 
 go 1.27.1
 

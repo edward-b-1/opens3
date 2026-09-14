@@ -9,7 +9,7 @@ import (
 	"encoding/xml"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 // MaxRules is the AWS limit on rules per configuration.

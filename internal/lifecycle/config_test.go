@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 func code(err error) s3err.Code {

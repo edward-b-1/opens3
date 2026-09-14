@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub's private
-vulnerability reporting: https://github.com/edward-b-1/OpenS3/security/advisories/new
+vulnerability reporting: https://github.com/edward-b-1/opens3/security/advisories/new
 You will receive an acknowledgement within three working days and a fix
 timeline within ten.
 

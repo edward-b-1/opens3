@@ -3,7 +3,7 @@ package iamapi
 import (
 	"strings"
 
-	"github.com/edward-b-1/OpenS3/internal/iam"
+	"github.com/edward-b-1/opens3/internal/iam"
 )
 
 func keyStatus(k *iam.Key) string {

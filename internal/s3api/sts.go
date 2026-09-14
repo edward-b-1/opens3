@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/iamapi"
+	"github.com/edward-b-1/opens3/internal/iamapi"
 )
 
 const stsNS = "https://sts.amazonaws.com/doc/2011-06-15/"

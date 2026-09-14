@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/meta"
 )
 
 // FS stores blobs as files: <root>/data/<bucket>/<id[:2]>/<id>, written to

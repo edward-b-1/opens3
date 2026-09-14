@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/kv"
-	"github.com/edward-b-1/OpenS3/internal/sse"
+	"github.com/edward-b-1/opens3/internal/kv"
+	"github.com/edward-b-1/opens3/internal/sse"
 )
 
 // Errors.

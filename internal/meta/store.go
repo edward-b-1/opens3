@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/edward-b-1/OpenS3/internal/kv"
+	"github.com/edward-b-1/opens3/internal/kv"
 )
 
 // ErrNotFound is returned when a record does not exist.

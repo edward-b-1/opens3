@@ -10,7 +10,7 @@
 ## Build
 
 ```sh
-git clone https://github.com/edward-b-1/OpenS3.git
+git clone https://github.com/edward-b-1/opens3.git
 cd opens3
 make build            # produces bin/opens3
 ```

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/iam"
-	"github.com/edward-b-1/OpenS3/internal/policy"
+	"github.com/edward-b-1/opens3/internal/iam"
+	"github.com/edward-b-1/opens3/internal/policy"
 )
 
 // --- server info -----------------------------------------------------------

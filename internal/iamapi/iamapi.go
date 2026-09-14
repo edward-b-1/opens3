@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/iam"
+	"github.com/edward-b-1/opens3/internal/iam"
 )
 
 // Namespace is the IAM API XML namespace and version.

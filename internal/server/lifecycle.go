@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/lifecycle"
+	"github.com/edward-b-1/opens3/internal/lifecycle"
 )
 
 // The lifecycle worker runs expiration, delete-marker cleanup, multipart

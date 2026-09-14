@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/edward-b-1/OpenS3/internal/checksum"
-	"github.com/edward-b-1/OpenS3/internal/meta"
-	"github.com/edward-b-1/OpenS3/internal/object"
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/checksum"
+	"github.com/edward-b-1/opens3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 func (s *Server) createMultipartUpload(c *reqCtx) error {

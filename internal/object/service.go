@@ -15,11 +15,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/edward-b-1/OpenS3/internal/blob"
-	"github.com/edward-b-1/OpenS3/internal/kms"
-	"github.com/edward-b-1/OpenS3/internal/kv"
-	"github.com/edward-b-1/OpenS3/internal/meta"
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/blob"
+	"github.com/edward-b-1/opens3/internal/kms"
+	"github.com/edward-b-1/opens3/internal/kv"
+	"github.com/edward-b-1/opens3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 // Limits (AWS values).

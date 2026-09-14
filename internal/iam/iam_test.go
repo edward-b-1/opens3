@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/kms"
-	"github.com/edward-b-1/OpenS3/internal/kv"
-	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/kms"
+	"github.com/edward-b-1/opens3/internal/kv"
+	"github.com/edward-b-1/opens3/internal/meta"
 )
 
 func openStore(t *testing.T) *Store {

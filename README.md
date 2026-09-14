@@ -56,7 +56,7 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 
 ## Source, issues and releases
 
-https://github.com/edward-b-1/OpenS3
+https://github.com/edward-b-1/opens3
 
 ## Building
 

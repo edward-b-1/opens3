@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/edward-b-1/OpenS3/internal/policy"
-	"github.com/edward-b-1/OpenS3/internal/s3err"
+	"github.com/edward-b-1/opens3/internal/policy"
+	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
 type corsConfig struct {

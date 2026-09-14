@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/edward-b-1/OpenS3/internal/notify"
+	"github.com/edward-b-1/opens3/internal/notify"
 )
 
 // Notification subsystem: targets come from OPENS3_NOTIFY_* environment

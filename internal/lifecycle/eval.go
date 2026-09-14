@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edward-b-1/OpenS3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/meta"
 )
 
 // Kind is the type of a lifecycle action.
