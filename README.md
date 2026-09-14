@@ -43,6 +43,8 @@ Docker: `docker compose up` with `OPENS3_ROOT_PASSWORD` set.
 
 ## Documentation
 
+- **`docs/manual/`** — the user manual: getting started, configuration, identity, buckets, encryption, console, operations, troubleshooting
+
 - `docs/PLAN.md` — architecture, feature matrix, roadmap
 - `docs/SURVEY.md` — Amazon S3, MinIO history, the alternatives, positioning
 - `docs/API-COVERAGE.md`, `docs/CONFORMANCE.md` — what works, measured
