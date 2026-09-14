@@ -33,7 +33,7 @@ type ExportEntry struct {
 	Path         string            `json:"path,omitempty"` // relative to the output directory
 	Size         int64             `json:"size"`
 	ETag         string            `json:"etag"`
-	Checksum     *meta.Checksum    `json:"checksum,omitempty"`
+	Checksum     *ExportChecksum   `json:"checksum,omitempty"`
 	ContentType  string            `json:"contentType,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Tags         []meta.Tag        `json:"tags,omitempty"`
@@ -41,6 +41,13 @@ type ExportEntry struct {
 	Encryption   string            `json:"encryption,omitempty"`
 	Exported     bool              `json:"exported"`
 	Reason       string            `json:"reason,omitempty"` // why not exported
+}
+
+// ExportChecksum is an object's additional checksum in the manifest.
+type ExportChecksum struct {
+	Algorithm string `json:"algorithm"`
+	Value     string `json:"value"` // base64
+	Type      string `json:"type"`  // FULL_OBJECT | COMPOSITE
 }
 
 // ExportResult summarises an export.
@@ -150,8 +157,11 @@ func walkVersions(ctx context.Context, svc *object.Service, bucket string, opts 
 }
 
 func exportOne(ctx context.Context, svc *object.Service, out string, v *meta.Object, current bool, opts ExportOptions) (*ExportEntry, error) {
-	e := &ExportEntry{Bucket: v.Bucket, Key: v.Key, Current: current, Size: v.Size, ETag: v.ETag, Checksum: v.Checksum,
+	e := &ExportEntry{Bucket: v.Bucket, Key: v.Key, Current: current, Size: v.Size, ETag: v.ETag,
 		ContentType: v.ContentType, Metadata: v.UserMeta, Tags: v.Tags, LastModified: v.ModTime}
+	if v.Checksum != nil {
+		e.Checksum = &ExportChecksum{Algorithm: v.Checksum.Algorithm, Value: v.Checksum.Value, Type: v.Checksum.Type}
+	}
 	if v.VersionID != meta.NullVersionID {
 		e.VersionID = v.VersionID
 	}
