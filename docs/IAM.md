@@ -477,7 +477,7 @@ must list the actions of each surface the operator will use.
 
 All identity records live in the metadata database under the `i/`
 namespace (`i/u/<name>`, `i/k/<accessKey>`, `i/g/<name>`, `i/p/<name>`). Secret keys are encrypted with the server master key
-(`OPENS3_MASTER_KEY`), so the master key must be backed up alongside the
+(`meta/master.keys` or `OPENS3_MASTER_KEY`), so the master key must be backed up alongside the
 data; see `docs/FORMAT.md`.
 
 ## 8. Recipes

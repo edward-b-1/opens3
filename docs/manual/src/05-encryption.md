@@ -34,7 +34,7 @@ and every stored access-key secret. It is generated on first start as 32
 random bytes in `<root>/meta/master.keys`, a file readable only by the
 server's user. The file can hold several keys: the newest one is used for
 new data and older ones remain able to read older data, which is how a key
-will be rotated (a rotation command is not in this version).
+is rotated (chapter 8, "Rotating the master key").
 
 Alternatively set `OPENS3_MASTER_KEY` to at least 32 characters of random
 material, for example from a secret manager injected at boot. The server

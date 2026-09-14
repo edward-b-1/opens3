@@ -28,6 +28,13 @@ const (
 	sep        = "\x00"
 )
 
+// ObjectNamespace and UploadNamespace are the prefixes of all object and
+// all multipart-upload records, for tools that scan every record.
+const (
+	ObjectNamespace = nsObject
+	UploadNamespace = nsUpload
+)
+
 // ErrBadVersionID is returned when a version ID cannot be parsed.
 var ErrBadVersionID = errors.New("meta: malformed version id")
 

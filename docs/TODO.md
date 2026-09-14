@@ -55,11 +55,9 @@ Move an item to "Done" with the commit that closed it.
 7. **DSSE-KMS is accepted but single-layer.** `aws:kms:dsse` is treated as
    `aws:kms`; either implement the second AES layer or reject the value.
 
-8. **Master key rotation and re-wrap.** `opens3 master-key rotate` (server
-    stopped) adds a new key to the ring; `opens3 master-key rewrap` re-wraps
-    every stored secret, KMS key and SSE-S3 data key under the newest key so
-    old keys can be dropped. Later: an external key service (Vault or
-    KMIP) so key custody is separate from the server.
+8. **External key service.** Vault or KMIP as the master key source so
+    key custody is separate from the server (rotation and re-wrap are
+    done; see Done).
 
 ## Deferred
 
@@ -69,6 +67,13 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- Master key rotation: `opens3 master status | rotate | rewrap | retire`
+  (server stopped) with re-wrapping of the key-check value, named keys,
+  access-key secrets and SSE-S3 data keys of objects and multipart
+  uploads; moves between the key file and `OPENS3_MASTER_KEY` in either
+  direction. Older keys stay in the ring until `retire` so pre-rotation
+  metadata backups remain restorable.
 
 - Console lint (`make lint-js`, ESLint no-undef) and Playwright smoke test
   (`make console-test`, Chromium/Firefox/WebKit, fails on any page error).

@@ -42,7 +42,9 @@ identity policy, never from a bucket policy.
 **"master key does not match this data directory" at start.**
 `OPENS3_MASTER_KEY` differs from the one the data root was created with, or
 `meta/master.keys` was replaced. Restore the original key; there is no
-way to read the data without it.
+way to read the data without it. After a rotation with an environment
+key, make sure `OPENS3_MASTER_KEY` holds the new value; `opens3 master
+status --root DIR` shows which keys the data directory accepts.
 
 **`AccessDenied` deleting a version.** Object Lock retention or legal hold.
 Governance retention can be bypassed with permission and the bypass flag;

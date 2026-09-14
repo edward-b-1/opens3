@@ -36,6 +36,8 @@ func main() {
 		os.Exit(runServer(os.Args[2:]))
 	case "admin":
 		os.Exit(runAdmin(os.Args[2:]))
+	case "master":
+		os.Exit(runMaster(os.Args[2:]))
 	case "version":
 		fmt.Println(versionString())
 	case "-h", "--help", "help":
@@ -79,11 +81,13 @@ func usage() {
 
 commands:
   server    run the object storage server
+  admin     administer a running server (users, keys, policies, buckets)
+  master    rotate the master key ring (server stopped)
   version   print the version
 
 environment:
   OPENS3_ROOT_USER, OPENS3_ROOT_PASSWORD   root credentials (required)
-  OPENS3_MASTER_KEY                        KMS master key material (recommended)
+  OPENS3_MASTER_KEY                        master key material kept outside the data directory (optional)
   OPENS3_ROOT, OPENS3_ADDRESS, OPENS3_REGION, OPENS3_DOMAINS, OPENS3_TLS_CERT, OPENS3_TLS_KEY`)
 }
 

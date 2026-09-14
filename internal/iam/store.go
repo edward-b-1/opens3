@@ -132,8 +132,16 @@ func mustJSON(v any) []byte {
 	return b
 }
 
+// KeyPrefix is the KV namespace of access-key records and SecretAAD the
+// associated data their secrets are wrapped with (package masterkey
+// re-wraps them after a master key rotation).
+const (
+	KeyPrefix = nsKey
+	SecretAAD = "iam-secret"
+)
+
 func (s *Store) wrapSecret(secret string) []byte {
-	w, err := s.cfg.Wrapper.Wrap([]byte(secret), []byte("iam-secret"))
+	w, err := s.cfg.Wrapper.Wrap([]byte(secret), []byte(SecretAAD))
 	if err != nil {
 		panic(err)
 	}
@@ -141,7 +149,7 @@ func (s *Store) wrapSecret(secret string) []byte {
 }
 
 func (s *Store) unwrapSecret(w []byte) (string, error) {
-	b, err := s.cfg.Wrapper.Unwrap(w, []byte("iam-secret"))
+	b, err := s.cfg.Wrapper.Unwrap(w, []byte(SecretAAD))
 	if err != nil {
 		return "", err
 	}

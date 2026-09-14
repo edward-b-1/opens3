@@ -45,7 +45,9 @@ scenarios.
   with policy; presigned URLs.
 - **Encryption:** SSE-S3, SSE-KMS with a built-in KMS, SSE-C including
   SSE-C copy sources; a master key ring under the data root
-  (`OPENS3_MASTER_KEY` or generated on first start).
+  (`OPENS3_MASTER_KEY` or generated on first start), rotated offline with
+  `opens3 master rotate | rewrap | retire`, which re-wrap every stored
+  secret, named key and SSE-S3 data key under the new key.
 - **Authentication and identity:** AWS Signature Version 4 in headers and
   query strings, signed and unsigned streaming payloads with trailers,
   Signature Version 2 for legacy clients; root credentials, IAM users,

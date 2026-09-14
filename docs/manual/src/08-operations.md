@@ -37,6 +37,49 @@ Restore by putting the data root back and starting the server with the
 same root credentials and, if used, the same `OPENS3_MASTER_KEY`. A key
 mismatch is refused at start.
 
+## Rotating the master key
+
+`opens3 master` works on the data directory with the server stopped (the
+database is locked while it runs). Every command takes `--root DIR`.
+
+| Command | What it does |
+|---|---|
+| `status` | Lists the keys in the ring with their fingerprints and how many records each still protects. |
+| `rotate` | Adds a new key to `meta/master.keys` and re-wraps every protected record under it. |
+| `rewrap` | Re-wraps under the current key whatever is still under an older one; finishes an interrupted `rotate`. `--dry-run` only counts. |
+| `retire` | Removes the older keys from the ring once no record needs them. Refuses while anything is still under an older key. |
+
+The protected records are the key-check value, the named encryption keys,
+every stored access-key secret and the data keys of SSE-S3 objects and
+multipart uploads. Objects under a named key (SSE-KMS) are not touched:
+their data keys are wrapped by the named key, which is itself re-wrapped.
+SSE-C objects and plaintext objects are not affected.
+
+A rotation is safe to interrupt: the new key is written to the ring before
+any record uses it, and older keys stay in the ring, so a half-finished
+`rotate` leaves everything readable and `rewrap` completes it.
+
+After `rotate`, **back up the key file again**: earlier copies lack the
+new key. The older keys stay in the ring on purpose. A backup of
+`meta/opens3.db` taken before the rotation still has its records wrapped
+under the old key, so restoring it needs that key. Run `retire` only when
+no such backup needs to be restorable, or keep a copy of the pre-rotation
+ring with those backups.
+
+**Environment keys.** When the server takes its key from `OPENS3_MASTER_KEY`,
+`rotate` needs the new material in `OPENS3_MASTER_KEY_NEW`; it re-wraps
+everything and tells you to move the new value into `OPENS3_MASTER_KEY`
+before starting the server. `OPENS3_MASTER_KEY_OLD` names a previous
+environment key so that `rewrap` can finish a rotation that was
+interrupted after the variables were swapped.
+
+**Moving between the file and the environment.** To move from the key
+file to an environment key, set `OPENS3_MASTER_KEY` to the new material,
+run `rewrap` (the file's keys are read as fallbacks), then `retire`, which
+deletes the file. To move the other way, unset `OPENS3_MASTER_KEY`, set
+`OPENS3_MASTER_KEY_OLD` to the current material and run `rotate`: it
+creates the file and re-wraps everything under it.
+
 ## Upgrades
 
 Stop, replace the binary, start. The on-disk format is versioned; a
@@ -93,4 +136,6 @@ endpoint comes from `--endpoint` or `OPENS3_ENDPOINT` (default
 | `kms list \| add ID \| rm ID` | Named encryption keys |
 
 Anything AWS tooling can do, do through `aws iam` (chapter 3); the
-bundled CLI exists for what AWS has no command for.
+bundled CLI exists for what AWS has no command for. `opens3 master`
+(above) is the other offline command: it needs the data directory, not a
+running server.

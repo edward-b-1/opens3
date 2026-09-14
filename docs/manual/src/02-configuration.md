@@ -22,6 +22,7 @@ There is no configuration file. Settings come from command-line flags and
 |---|---|
 | `OPENS3_ROOT_USER`, `OPENS3_ROOT_PASSWORD` | Root credentials. Required. Also the root sign-in for the console. |
 | `OPENS3_MASTER_KEY` | Optional master key material, at least 32 characters of random data (`openssl rand -base64 32`). When set, the key file is not used. See chapter 5. |
+| `OPENS3_MASTER_KEY_NEW`, `OPENS3_MASTER_KEY_OLD` | Read only by `opens3 master` when rotating an environment key (chapter 8). |
 | `OPENS3_ROOT`, `OPENS3_ADDRESS`, `OPENS3_REGION` | Same as the flags. |
 | `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
 | `OPENS3_HSTS`, `OPENS3_NO_HSTS` | `Strict-Transport-Security` is sent over TLS only when the certificate is not self-signed; `OPENS3_HSTS=1` forces it on, `OPENS3_NO_HSTS=1` forces it off. |

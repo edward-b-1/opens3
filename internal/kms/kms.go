@@ -53,7 +53,20 @@ type Local struct {
 	kv     kv.Store
 }
 
-const checkKey = nsKey + ".master-check"
+// CheckKey is the KV key of the master key-check value and CheckAAD its
+// associated data; KeyPrefix is the namespace of named keys and KeyAAD(id)
+// the associated data their material is wrapped with. Package masterkey
+// uses them to re-wrap after a rotation.
+const (
+	CheckKey  = nsKey + ".master-check"
+	CheckAAD  = "master-check"
+	KeyPrefix = nsKey
+)
+
+const checkKey = CheckKey
+
+// KeyAAD is the associated data a named key's material is wrapped with.
+func KeyAAD(id string) []byte { return []byte("kms-key:" + id) }
 
 // NewLocal creates the local KMS over a master key ring, verifies the ring
 // matches the data directory (a key-check value written on first start)
@@ -65,12 +78,12 @@ func NewLocal(db kv.Store, master *Master) (*Local, error) {
 	l := &Local{master: master, kv: db}
 	err := db.Update(func(tx kv.Txn) error {
 		if b, err := tx.Get([]byte(checkKey)); err == nil {
-			if _, err := master.Unwrap(b, []byte("master-check")); err != nil {
+			if _, err := master.Unwrap(b, []byte(CheckAAD)); err != nil {
 				return ErrMasterMismatch
 			}
 			return nil
 		}
-		w, err := master.Wrap([]byte("opens3-master-check"), []byte("master-check"))
+		w, err := master.Wrap([]byte("opens3-master-check"), []byte(CheckAAD))
 		if err != nil {
 			return err
 		}
@@ -87,6 +100,10 @@ func NewLocal(db kv.Store, master *Master) (*Local, error) {
 
 // Master returns the master key ring (IAM wraps stored secrets with it).
 func (l *Local) Master() *Master { return l.master }
+
+// ContextAAD is the associated data derived from an encryption context
+// (sorted "k=v&" pairs); SSE-S3 data keys use {"bucket": name}.
+func ContextAAD(ctx map[string]string) []byte { return contextAAD(ctx) }
 
 func contextAAD(ctx map[string]string) []byte {
 	if len(ctx) == 0 {
@@ -110,7 +127,7 @@ func (l *Local) CreateKey(id string) error {
 		return ErrInvalidKey
 	}
 	material := sse.NewDEK()
-	w, err := l.master.Wrap(material, []byte("kms-key:"+id))
+	w, err := l.master.Wrap(material, KeyAAD(id))
 	if err != nil {
 		return err
 	}
@@ -174,7 +191,7 @@ func (l *Local) keyMaterial(id string) ([]byte, error) {
 	if k.Disabled {
 		return nil, fmt.Errorf("kms: key %s is disabled", id)
 	}
-	return l.master.Unwrap(k.Wrapped, []byte("kms-key:"+id))
+	return l.master.Unwrap(k.Wrapped, KeyAAD(id))
 }
 
 // KeyExists implements KMS.

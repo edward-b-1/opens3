@@ -195,6 +195,7 @@ There is no configuration file. Settings come from command-line flags and
 |---|---|
 | `OPENS3_ROOT_USER`, `OPENS3_ROOT_PASSWORD` | Root credentials. Required. Also the root sign-in for the console. |
 | `OPENS3_MASTER_KEY` | Optional master key material, at least 32 characters of random data (`openssl rand -base64 32`). When set, the key file is not used. See chapter 5. |
+| `OPENS3_MASTER_KEY_NEW`, `OPENS3_MASTER_KEY_OLD` | Read only by `opens3 master` when rotating an environment key (chapter 8). |
 | `OPENS3_ROOT`, `OPENS3_ADDRESS`, `OPENS3_REGION` | Same as the flags. |
 | `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
 | `OPENS3_HSTS`, `OPENS3_NO_HSTS` | `Strict-Transport-Security` is sent over TLS only when the certificate is not self-signed; `OPENS3_HSTS=1` forces it on, `OPENS3_NO_HSTS=1` forces it off. |
@@ -565,7 +566,7 @@ and every stored access-key secret. It is generated on first start as 32
 random bytes in `<root>/meta/master.keys`, a file readable only by the
 server's user. The file can hold several keys: the newest one is used for
 new data and older ones remain able to read older data, which is how a key
-will be rotated (a rotation command is not in this version).
+is rotated (chapter 8, "Rotating the master key").
 
 Alternatively set `OPENS3_MASTER_KEY` to at least 32 characters of random
 material, for example from a secret manager injected at boot. The server
@@ -792,6 +793,49 @@ Restore by putting the data root back and starting the server with the
 same root credentials and, if used, the same `OPENS3_MASTER_KEY`. A key
 mismatch is refused at start.
 
+### Rotating the master key
+
+`opens3 master` works on the data directory with the server stopped (the
+database is locked while it runs). Every command takes `--root DIR`.
+
+| Command | What it does |
+|---|---|
+| `status` | Lists the keys in the ring with their fingerprints and how many records each still protects. |
+| `rotate` | Adds a new key to `meta/master.keys` and re-wraps every protected record under it. |
+| `rewrap` | Re-wraps under the current key whatever is still under an older one; finishes an interrupted `rotate`. `--dry-run` only counts. |
+| `retire` | Removes the older keys from the ring once no record needs them. Refuses while anything is still under an older key. |
+
+The protected records are the key-check value, the named encryption keys,
+every stored access-key secret and the data keys of SSE-S3 objects and
+multipart uploads. Objects under a named key (SSE-KMS) are not touched:
+their data keys are wrapped by the named key, which is itself re-wrapped.
+SSE-C objects and plaintext objects are not affected.
+
+A rotation is safe to interrupt: the new key is written to the ring before
+any record uses it, and older keys stay in the ring, so a half-finished
+`rotate` leaves everything readable and `rewrap` completes it.
+
+After `rotate`, **back up the key file again**: earlier copies lack the
+new key. The older keys stay in the ring on purpose. A backup of
+`meta/opens3.db` taken before the rotation still has its records wrapped
+under the old key, so restoring it needs that key. Run `retire` only when
+no such backup needs to be restorable, or keep a copy of the pre-rotation
+ring with those backups.
+
+**Environment keys.** When the server takes its key from `OPENS3_MASTER_KEY`,
+`rotate` needs the new material in `OPENS3_MASTER_KEY_NEW`; it re-wraps
+everything and tells you to move the new value into `OPENS3_MASTER_KEY`
+before starting the server. `OPENS3_MASTER_KEY_OLD` names a previous
+environment key so that `rewrap` can finish a rotation that was
+interrupted after the variables were swapped.
+
+**Moving between the file and the environment.** To move from the key
+file to an environment key, set `OPENS3_MASTER_KEY` to the new material,
+run `rewrap` (the file's keys are read as fallbacks), then `retire`, which
+deletes the file. To move the other way, unset `OPENS3_MASTER_KEY`, set
+`OPENS3_MASTER_KEY_OLD` to the current material and run `rotate`: it
+creates the file and re-wraps everything under it.
+
 ### Upgrades
 
 Stop, replace the binary, start. The on-disk format is versioned; a
@@ -848,7 +892,9 @@ endpoint comes from `--endpoint` or `OPENS3_ENDPOINT` (default
 | `kms list \| add ID \| rm ID` | Named encryption keys |
 
 Anything AWS tooling can do, do through `aws iam` (chapter 3); the
-bundled CLI exists for what AWS has no command for.
+bundled CLI exists for what AWS has no command for. `opens3 master`
+(above) is the other offline command: it needs the data directory, not a
+running server.
 
 ---
 
@@ -947,7 +993,9 @@ identity policy, never from a bucket policy.
 **"master key does not match this data directory" at start.**
 `OPENS3_MASTER_KEY` differs from the one the data root was created with, or
 `meta/master.keys` was replaced. Restore the original key; there is no
-way to read the data without it.
+way to read the data without it. After a rotation with an environment
+key, make sure `OPENS3_MASTER_KEY` holds the new value; `opens3 master
+status --root DIR` shows which keys the data directory accepts.
 
 **`AccessDenied` deleting a version.** Object Lock retention or legal hold.
 Governance retention can be bypassed with permission and the bypass flag;
