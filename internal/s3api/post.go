@@ -153,6 +153,9 @@ func (s *Server) postObject(c *reqCtx) error {
 	}
 	if acl := fields["acl"]; acl != "" && c.bkt.Ownership != "BucketOwnerEnforced" {
 		a, ok := cannedACL(acl, c.actor().CanonicalID, c.actor().DisplayName, c.bkt.Owner, c.bkt.OwnerDisplay)
+		if ok && c.bkt.PublicAccessBlock != nil && c.bkt.PublicAccessBlock.BlockPublicAcls && isPublicACL(a) {
+			return s3err.New(s3err.AccessDenied).WithMessage("Public ACLs are blocked by the BlockPublicAcls setting")
+		}
 		if !ok {
 			return errInvalidArg("invalid acl")
 		}

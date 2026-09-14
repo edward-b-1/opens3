@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/edward-b-1/opens3/internal/admin"
 	"github.com/edward-b-1/opens3/internal/server"
 )
 
@@ -209,15 +210,28 @@ func TestAuthorizationContexts(t *testing.T) {
 	}
 	e.put("src", "plain", "p")
 
-	// Copy: the source's existing tags are part of the source authorisation.
+	// Copy: the source's existing tags are part of the source authorisation,
+	// and copying them needs GetObjectTagging there and PutObjectTagging here.
 	eve := e.managedUser("eve", `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::src/*","Condition":{"StringEquals":{"s3:ExistingObjectTag/env":"prod"}}},
 		{"Effect":"Allow","Action":"s3:PutObject","Resource":"arn:aws:s3:::dst/*"}]}`)
-	if _, err := eve.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c1"), CopySource: aws.String("/src/tagged")}); err != nil {
-		t.Fatalf("copy of a tagged source: %v", err)
+	if _, err := eve.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c1"), CopySource: aws.String("/src/tagged")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("copy of a tagged source without tagging permissions: %v", err)
+	}
+	if _, err := eve.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c1"), CopySource: aws.String("/src/tagged"), TaggingDirective: types.TaggingDirectiveReplace}); err != nil {
+		t.Fatalf("copy of a tagged source dropping the tags: %v", err)
 	}
 	if _, err := eve.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c2"), CopySource: aws.String("/src/plain")}); errCode(err) != "AccessDenied" {
 		t.Fatalf("copy of an untagged source: %v", err)
+	}
+	eva := e.managedUser("eva", `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":["s3:GetObject","s3:GetObjectTagging"],"Resource":"arn:aws:s3:::src/*"},
+		{"Effect":"Allow","Action":["s3:PutObject","s3:PutObjectTagging"],"Resource":"arn:aws:s3:::dst/*"}]}`)
+	if _, err := eva.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("dst"), Key: aws.String("c3"), CopySource: aws.String("/src/tagged")}); err != nil {
+		t.Fatalf("copy of a tagged source with tagging permissions: %v", err)
+	}
+	if tg, err := e.s3.GetObjectTagging(e.ctx, &s3.GetObjectTaggingInput{Bucket: aws.String("dst"), Key: aws.String("c3")}); err != nil || len(tg.TagSet) != 1 {
+		t.Fatalf("copied tags: %v %+v", err, tg)
 	}
 
 	// UploadPartCopy with a version needs s3:GetObjectVersion.
@@ -391,5 +405,53 @@ func TestUploadAttributePermissions(t *testing.T) {
 	}
 	if _, err := e.anon().GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("mine"), Key: aws.String("k")}); err != nil {
 		t.Fatalf("public-read ACL not applied: %v", err)
+	}
+	// ... but Object Lock settings always need their policy permission.
+	if _, err := owner.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("minelock"), ObjectLockEnabledForBucket: aws.Bool(true), ObjectOwnership: types.ObjectOwnershipObjectWriter}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("minelock"), Key: aws.String("h"), Body: strings.NewReader("x"), ObjectLockLegalHoldStatus: types.ObjectLockLegalHoldStatusOn}); errCode(err) != "AccessDenied" {
+		t.Fatalf("ACL-granted upload with a legal hold: %v", err)
+	}
+	// BlockPublicAcls applies to copies and browser uploads as to PUT.
+	if _, err := e.s3.PutPublicAccessBlock(e.ctx, &s3.PutPublicAccessBlockInput{Bucket: aws.String("mine"), PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{BlockPublicAcls: aws.Bool(true)}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("mine"), Key: aws.String("k2"), CopySource: aws.String("/mine/k"), ACL: types.ObjectCannedACLPublicRead}); errCode(err) != "AccessDenied" {
+		t.Fatalf("public ACL on copy with BlockPublicAcls: %v", err)
+	}
+}
+
+// TestRestrictedCredentialsCannotRotate: rotating a key issues a
+// credential, so restricted credentials may not do it either.
+func TestRestrictedCredentialsCannotRotate(t *testing.T) {
+	e := newEnv(t)
+	ic := e.iam(rootUser, rootPass)
+	if _, err := ic.CreateUser(e.ctx, &iam.CreateUserInput{UserName: aws.String("rob")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.AttachUserPolicy(e.ctx, &iam.AttachUserPolicyInput{UserName: aws.String("rob"), PolicyArn: aws.String("arn:aws:iam::aws:policy/consoleAdmin")}); err != nil {
+		t.Fatal(err)
+	}
+	ck, err := ic.CreateAccessKey(e.ctx, &iam.CreateAccessKeyInput{UserName: aws.String("rob")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ak, sk := *ck.AccessKey.AccessKeyId, *ck.AccessKey.SecretAccessKey
+	// A session narrowed to key management only.
+	narrow := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:*","sts:*"],"Resource":"*"}]}`
+	ar, err := e.sts(ak, sk, "").AssumeRole(e.ctx, &sts.AssumeRoleInput{RoleArn: aws.String("arn:aws:iam::000000000000:role/any"), RoleSessionName: aws.String("s"), Policy: aws.String(narrow)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restricted := admin.NewClient(e.ts.URL, *ar.Credentials.AccessKeyId, *ar.Credentials.SecretAccessKey)
+	restricted.SessionToken = *ar.Credentials.SessionToken
+	if _, err := restricted.RotateKey(e.ctx, ak, ""); err == nil || !strings.Contains(err.Error(), "AccessDenied") {
+		t.Fatalf("restricted session rotated an unrestricted key: %v", err)
+	}
+	// The unrestricted key itself can rotate.
+	full := admin.NewClient(e.ts.URL, ak, sk)
+	if _, err := full.RotateKey(e.ctx, ak, ""); err != nil {
+		t.Fatalf("rotate with full credentials: %v", err)
 	}
 }

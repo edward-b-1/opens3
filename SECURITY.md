@@ -57,6 +57,24 @@ v0.1.1 (`CHANGELOG.md`, section 0.1.1, lists every change):
 Object files were also created world-readable on the host; v0.1.1
 creates them owner-only (existing files are not changed).
 
+### OPENS3-2026-002: further authorisation gaps in v0.1.1
+
+**Affected:** v0.1.0, v0.1.1. **Fixed in:** v0.2.0.
+
+1. **Restricted credentials could still escalate by rotating a key.**
+   v0.1.1 stopped credentials narrowed by a session policy from creating
+   keys, but the admin API's key rotation was not covered: such a
+   credential allowed `iam:UpdateAccessKey` could rotate its user's
+   unrestricted key and use the new secret with full rights. Deployments
+   that use session policies and grant `iam:*` inside them are affected.
+2. **Copied tags bypassed the tagging permission**, and Object Lock
+   settings on an upload could ride on a bucket ACL grant.
+3. **Operations were not bound to the authorised record**: a copy, or a
+   tag/ACL/retention/legal-hold update, authorised against one object
+   version could act on a replacement written in the meantime; a write
+   authorised against a bucket could land in a bucket of the same name
+   created after the original was deleted. Microsecond windows, but real.
+
 ## Supported versions
 
 Each minor release receives security fixes for at least twelve months after

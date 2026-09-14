@@ -301,7 +301,7 @@ func (w *Worker) apply(ctx context.Context, b *meta.Bucket, c candidate, now tim
 		w.emit(object.Event{Name: name, Bucket: b, Object: o, Key: o.Key, VersionID: res.VersionID, Time: now})
 		log.Debug("lifecycle expired current version", "delete_marker", res.DeleteMarker)
 	case KindExpireNoncurrentVersion, KindRemoveDeleteMarker:
-		if _, err := w.obj.DeleteObject(ctx, Actor, object.DeleteInput{Bucket: b.Name, Key: o.Key, VersionID: o.VersionID}); err != nil {
+		if _, err := w.obj.DeleteObject(ctx, Actor, object.DeleteInput{Bucket: b.Name, Key: o.Key, VersionID: o.VersionID, IfSeq: o.Seq}); err != nil {
 			w.failed(log, err, st)
 			return
 		}
@@ -314,7 +314,7 @@ func (w *Worker) apply(ctx context.Context, b *meta.Bucket, c candidate, now tim
 		log.Debug("lifecycle deleted version")
 	case KindTransition, KindNoncurrentTransition:
 		sc := c.action.StorageClass
-		upd, err := w.obj.UpdateObjectMeta(ctx, b.Name, o.Key, o.VersionID, func(v *meta.Object) error {
+		upd, err := w.obj.UpdateObjectMeta(object.WithExpectedObject(ctx, o), b.Name, o.Key, o.VersionID, func(v *meta.Object) error {
 			if classRank[sc] <= classRank[v.StorageClass] {
 				return errAlreadyTransitioned
 			}

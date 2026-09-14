@@ -442,7 +442,7 @@ func (s *Service) PutObject(ctx context.Context, actor Actor, in PutInput) (*met
 		// authorised against (not deleted and recreated meanwhile).
 		seen := b
 		b, err := meta.GetBucket(tx, in.Bucket)
-		if errors.Is(err, kv.ErrNotFound) || (err == nil && !sameBucket(b, seen)) {
+		if errors.Is(err, kv.ErrNotFound) || (err == nil && (!sameBucket(b, seen) || !bucketExpected(ctx, b))) {
 			return s3err.New(s3err.NoSuchBucket)
 		} else if err != nil {
 			return err

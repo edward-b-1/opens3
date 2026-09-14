@@ -15,7 +15,7 @@ import (
 func (s *Service) updateVersion(ctx context.Context, bucket, key, versionID string, fn func(o *meta.Object) error) (*meta.Object, error) {
 	var out *meta.Object
 	err := s.kv.Update(func(tx kv.Txn) error {
-		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := liveBucket(ctx, tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err
@@ -32,6 +32,9 @@ func (s *Service) updateVersion(ctx context.Context, bucket, key, versionID stri
 		}
 		if err != nil {
 			return keyErr(err, bucket, key)
+		}
+		if !objectExpected(ctx, o) {
+			return errChanged()
 		}
 		if o.DeleteMarker {
 			return s3err.New(s3err.MethodNotAllowed).WithHeader("x-amz-delete-marker", "true").WithHeader("x-amz-version-id", o.VersionID)

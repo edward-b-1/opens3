@@ -43,7 +43,7 @@ func (s *Service) DeleteObject(ctx context.Context, actor Actor, in DeleteInput)
 	var eventObj *meta.Object
 	eventName := "s3:ObjectRemoved:Delete"
 	err := s.kv.Update(func(tx kv.Txn) error {
-		b, err := getLiveBucket(tx, in.Bucket)
+		b, err := liveBucket(ctx, tx, in.Bucket)
 		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(in.Bucket)
 		} else if err != nil {
@@ -65,6 +65,12 @@ func (s *Service) DeleteObject(ctx context.Context, actor Actor, in DeleteInput)
 			}
 			if in.IfMatch != "" && !etagMatches(in.IfMatch, o.ETag) {
 				return s3err.New(s3err.PreconditionFailed)
+			}
+			if in.IfSeq != 0 && o.Seq != in.IfSeq {
+				return s3err.New(s3err.PreconditionFailed)
+			}
+			if !objectExpected(ctx, o) {
+				return errChanged()
 			}
 			if err := checkLocked(o, in.BypassGovernance); err != nil {
 				return err

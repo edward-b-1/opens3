@@ -22,8 +22,10 @@ type Client struct {
 	Endpoint  string // e.g. http://localhost:9000
 	AccessKey string
 	SecretKey string
-	Region    string       // defaults to us-east-1
-	HTTP      *http.Client // defaults to a client with a 60s timeout
+	// SessionToken is sent as X-Amz-Security-Token for temporary credentials.
+	SessionToken string
+	Region       string       // defaults to us-east-1
+	HTTP         *http.Client // defaults to a client with a 60s timeout
 }
 
 // NewClient returns a client for endpoint with the given credentials.
@@ -58,6 +60,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	region := c.Region
 	if region == "" {
 		region = "us-east-1"
+	}
+	if c.SessionToken != "" {
+		r.Header.Set("X-Amz-Security-Token", c.SessionToken)
 	}
 	sigv4.Sign(r, c.AccessKey, c.SecretKey, region, time.Now(), hex.EncodeToString(sum[:]))
 	hc := c.HTTP

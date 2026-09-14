@@ -13,6 +13,37 @@ tagged tree.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
+Operational tooling release with further authorisation fixes: see
+advisory OPENS3-2026-002 in `SECURITY.md`. No on-disk format change
+since 0.1.1.
+
+### Security
+
+- Rotating an access key through the admin API is refused for
+  credentials restricted by a session policy (the new secret would carry
+  none of the restriction), like creating one.
+- Copying an object copies its tags, which now needs
+  `s3:GetObjectTagging` on the source and `s3:PutObjectTagging` on the
+  destination, as on AWS; `x-amz-tagging-directive: REPLACE` copies
+  without them.
+- Object Lock retention and legal hold set on an upload always need
+  their permission, even when the upload itself was granted by an ACL;
+  `BlockPublicAcls` now applies to copies and browser form uploads as it
+  did to PUT.
+- Operations are bound to the records they were authorised against: a
+  copy reads exactly the source version that was checked, metadata
+  updates (tags, ACL, retention, legal hold) act only on the version
+  that was checked, and every write verifies the bucket is the
+  incarnation that was checked. A replacement in between yields
+  `NoSuchKey`/`NoSuchBucket` instead of acting on the replacement. Copy
+  sources are evaluated with the source bucket's `aws:ResourceTag`
+  values.
+- Lifecycle version deletes and transitions are guarded by the scanned
+  version's sequence; persistent notification queue files are created
+  owner-only.
+
 ### Added
 
 - `opens3 fsck check` and `opens3 fsck repair`: verify the data directory
@@ -180,6 +211,7 @@ scenarios.
   targets other than webhooks (phase 2).
 - DSSE-KMS is accepted and treated as SSE-KMS (single layer).
 
-[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/edward-b-1/opens3/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edward-b-1/opens3/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/edward-b-1/opens3/releases/tag/v0.1.0

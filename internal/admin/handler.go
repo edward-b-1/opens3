@@ -603,6 +603,9 @@ func (h *Handler) setKeyStatus(enabled bool) handlerFunc {
 }
 
 func (h *Handler) rotateKey(c *req) (any, error) {
+	if err := iam.CheckCredentialIssuer(c.id); err != nil {
+		return nil, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: err.Error()}
+	}
 	ak := c.path("ak")
 	var in RotateKeyRequest
 	if err := c.decode(&in); err != nil {

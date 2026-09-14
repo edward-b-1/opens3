@@ -84,7 +84,7 @@ func (s *Service) CreateUpload(ctx context.Context, actor Actor, in CreateUpload
 func (s *Service) GetUpload(ctx context.Context, bucket, key, uploadID string) (*meta.Upload, error) {
 	var u *meta.Upload
 	err := s.kv.View(func(tx kv.Txn) error {
-		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := liveBucket(ctx, tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err
@@ -220,7 +220,7 @@ func (s *Service) CompleteUpload(ctx context.Context, actor Actor, in CompleteIn
 	err = s.kv.Update(func(tx kv.Txn) error {
 		seen := b
 		b, err := meta.GetBucket(tx, in.Bucket)
-		if errors.Is(err, kv.ErrNotFound) || (err == nil && !sameBucket(b, seen)) {
+		if errors.Is(err, kv.ErrNotFound) || (err == nil && (!sameBucket(b, seen) || !bucketExpected(ctx, b))) {
 			return s3err.New(s3err.NoSuchBucket)
 		} else if err != nil {
 			return err
@@ -356,7 +356,7 @@ func (s *Service) assemble(u *meta.Upload, in CompleteInput, stored []meta.Part)
 func (s *Service) AbortUpload(ctx context.Context, bucket, key, uploadID string) error {
 	var parts []meta.Part
 	err := s.kv.Update(func(tx kv.Txn) error {
-		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := liveBucket(ctx, tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err
@@ -424,7 +424,7 @@ func (s *Service) ListParts(ctx context.Context, bucket, key, uploadID string, m
 func (s *Service) ListUploads(ctx context.Context, bucket string, opt meta.ListOptions) (*meta.UploadListResult, error) {
 	var res *meta.UploadListResult
 	err := s.kv.View(func(tx kv.Txn) error {
-		if _, err := getLiveBucket(tx, bucket); errors.Is(err, kv.ErrNotFound) {
+		if _, err := liveBucket(ctx, tx, bucket); errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(bucket)
 		} else if err != nil {
 			return err

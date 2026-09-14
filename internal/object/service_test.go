@@ -639,3 +639,69 @@ func TestDeleteIfSeq(t *testing.T) {
 		t.Fatalf("matching-sequence delete: %v", err)
 	}
 }
+
+func TestRequestExpectations(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	actor := Actor{CanonicalID: "me"}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "expect"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := s.GetBucket(ctx, "expect")
+	first, err := s.PutObject(ctx, actor, PutInput{Bucket: "expect", Key: "k", Body: strings.NewReader("one"), Size: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A metadata update authorised against the first version must not
+	// touch a replacement.
+	second, _ := s.PutObject(ctx, actor, PutInput{Bucket: "expect", Key: "k", Body: strings.NewReader("two"), Size: 3})
+	stale := WithExpectedObject(ctx, first)
+	if _, err := s.PutObjectTagging(stale, actor, "expect", "k", "", []meta.Tag{{Key: "a", Value: "b"}}); code(err) != s3err.NoSuchKey {
+		t.Fatalf("tagging a replaced version: %v", err)
+	}
+	if _, err := s.PutObjectTagging(WithExpectedObject(ctx, second), actor, "expect", "k", "", []meta.Tag{{Key: "a", Value: "b"}}); err != nil {
+		t.Fatalf("tagging the expected version: %v", err)
+	}
+	// A copy authorised against the first version must not read the replacement.
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "dst"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.CopyObject(WithExpectedSource(ctx, first), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); code(err) != s3err.NoSuchKey {
+		t.Fatalf("copying a replaced source: %v", err)
+	}
+	if _, _, err := s.CopyObject(WithExpectedSource(ctx, second), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); err != nil {
+		t.Fatalf("copying the expected source: %v", err)
+	}
+	// A version delete guarded by sequence, and by expectation.
+	if _, err := s.DeleteObject(ctx, actor, DeleteInput{Bucket: "expect", Key: "k", VersionID: meta.NullVersionID, IfSeq: first.Seq}); code(err) != s3err.PreconditionFailed {
+		t.Fatalf("version delete with a stale sequence: %v", err)
+	}
+	if _, err := s.DeleteObject(stale, actor, DeleteInput{Bucket: "expect", Key: "k", VersionID: meta.NullVersionID}); code(err) != s3err.NoSuchKey {
+		t.Fatalf("version delete against a replaced object: %v", err)
+	}
+	// A write authorised against a bucket incarnation that was deleted and
+	// recreated is refused, in every write path.
+	old := WithExpectedBucket(ctx, b)
+	if err := s.DeleteBucket(ctx, "expect"); err == nil {
+		t.Fatal("bucket with objects deleted")
+	}
+	s.DeleteObject(ctx, actor, DeleteInput{Bucket: "expect", Key: "k"})
+	if err := s.DeleteBucket(ctx, "expect"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "expect"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PutObject(old, actor, PutInput{Bucket: "expect", Key: "late", Body: strings.NewReader("x"), Size: 1}); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("put into a recreated bucket: %v", err)
+	}
+	if _, err := s.UpdateBucket(old, "expect", func(b *meta.Bucket) error { b.Versioning = "Enabled"; return nil }); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("bucket update on a recreated bucket: %v", err)
+	}
+	if _, err := s.DeleteObject(old, actor, DeleteInput{Bucket: "expect", Key: "late"}); code(err) != s3err.NoSuchBucket {
+		t.Fatalf("delete in a recreated bucket: %v", err)
+	}
+	if _, err := s.PutObject(ctx, actor, PutInput{Bucket: "expect", Key: "fresh", Body: strings.NewReader("x"), Size: 1}); err != nil {
+		t.Fatalf("put without an expectation: %v", err)
+	}
+}

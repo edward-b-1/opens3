@@ -471,23 +471,25 @@ func (s *Server) authorizeAttributes(c *reqCtx, get func(string) string) error {
 	checks := []struct {
 		present bool
 		action  string
+		byACL   bool // an ACL grant of the upload covers it (AWS behaviour, per the conformance suite)
 	}{
-		{get("x-amz-acl") != "" || hasGrant, "s3:PutObjectAcl"},
-		{get("x-amz-tagging") != "", "s3:PutObjectTagging"},
-		{get("x-amz-object-lock-mode") != "" || get("x-amz-object-lock-retain-until-date") != "", "s3:PutObjectRetention"},
-		{get("x-amz-object-lock-legal-hold") != "", "s3:PutObjectLegalHold"},
+		{get("x-amz-acl") != "" || hasGrant, "s3:PutObjectAcl", true},
+		{get("x-amz-tagging") != "", "s3:PutObjectTagging", true},
+		{get("x-amz-object-lock-mode") != "" || get("x-amz-object-lock-retain-until-date") != "", "s3:PutObjectRetention", false},
+		{get("x-amz-object-lock-legal-hold") != "", "s3:PutObjectLegalHold", false},
 	}
 	for _, ck := range checks {
 		if !ck.present {
 			continue
 		}
 		switch g := s.iam.Decide(s.authzRequest(c, ck.action)); {
-		case g.Allowed():
-		case g == iam.NoGrant && c.grant == iam.ByACL:
+		case g == iam.ByPolicy:
+		case g == iam.ByACL && ck.byACL:
+		case g == iam.NoGrant && c.grant == iam.ByACL && ck.byACL:
 			// The upload itself was granted by an ACL (bucket WRITE, or
-			// ownership). Under the ACL model that grant covers what the
-			// uploader sets on its own new object; only policies name the
-			// per-attribute actions, and none denied this one.
+			// ownership). Under the ACL model that grant covers the ACL and
+			// tags the uploader sets on its own new object; Object Lock
+			// settings are policy-era features and always need a policy.
 		default:
 			return s3err.New(s3err.AccessDenied).WithMessage("Access Denied: the request sets an attribute that requires %s", ck.action)
 		}

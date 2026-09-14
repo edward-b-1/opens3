@@ -3,6 +3,10 @@
 Open items agreed with the maintainer, worked through one at a time.
 Move an item to "Done" with the commit that closed it.
 
+Status (14 Sep 2026, v0.2.0): everything below "Open" is deferred by
+decision, not dropped; the next one to pick up is the audit log (item
+4), then phase 2 features by demand, then the erasure-coding design.
+
 ## Open
 
 1. **TLS.** The listener already serves HTTPS from `--tls-cert`/`--tls-key`

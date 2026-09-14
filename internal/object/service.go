@@ -209,6 +209,25 @@ func getLiveBucket(tx kv.Txn, name string) (*meta.Bucket, error) {
 	return b, nil
 }
 
+// liveBucket is getLiveBucket that also requires the bucket to be the
+// incarnation the request was authorised against (see expect.go).
+func liveBucket(ctx context.Context, tx kv.Txn, name string) (*meta.Bucket, error) {
+	b, err := getLiveBucket(tx, name)
+	if err != nil {
+		return nil, err
+	}
+	if !bucketExpected(ctx, b) {
+		return nil, kv.ErrNotFound
+	}
+	return b, nil
+}
+
+// errChanged is returned when the object a request was authorised against
+// was replaced before the operation ran.
+func errChanged() error {
+	return s3err.New(s3err.NoSuchKey).WithMessage("The object changed while the request was being processed. Retry the request.")
+}
+
 // sameBucket reports whether cur is the same incarnation of the bucket
 // that was read (and authorised) earlier: a bucket deleted and recreated
 // under the same name has a different creation time, and writes
@@ -221,7 +240,7 @@ func sameBucket(cur, seen *meta.Bucket) bool {
 func (s *Service) UpdateBucket(ctx context.Context, name string, fn func(b *meta.Bucket) error) (*meta.Bucket, error) {
 	var out *meta.Bucket
 	err := s.kv.Update(func(tx kv.Txn) error {
-		b, err := meta.GetBucket(tx, name)
+		b, err := liveBucket(ctx, tx, name)
 		if errors.Is(err, kv.ErrNotFound) {
 			return s3err.New(s3err.NoSuchBucket).WithResource(name)
 		} else if err != nil {

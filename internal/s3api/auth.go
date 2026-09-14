@@ -13,6 +13,7 @@ import (
 	"github.com/edward-b-1/opens3/internal/auth/sigv4"
 	"github.com/edward-b-1/opens3/internal/iam"
 	"github.com/edward-b-1/opens3/internal/meta"
+	"github.com/edward-b-1/opens3/internal/object"
 	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
@@ -197,6 +198,10 @@ func (s *Server) authorize(c *reqCtx) error {
 		// Missing objects are reported by the handler after authorisation
 		// (AWS returns 403 for unauthorised callers, 404 for authorised).
 	}
+	// Bind the operation to what it is authorised against (object/expect.go).
+	if c.bkt != nil || c.objMeta != nil {
+		c.r = c.r.WithContext(object.WithExpectedObject(object.WithExpectedBucket(c.r.Context(), c.bkt), c.objMeta))
+	}
 	req := iam.Request{Identity: c.identity, Action: op.action, Bucket: c.bucket, Conditions: s.conditionContext(c)}
 	if op.level == 2 {
 		req.Key = c.key
@@ -261,6 +266,12 @@ func (s *Server) authorize(c *reqCtx) error {
 
 // conditionContext builds the IAM condition keys for the request.
 func (s *Server) conditionContext(c *reqCtx) map[string][]string {
+	return s.conditionContextFor(c, c.bkt)
+}
+
+// conditionContextFor builds the condition keys with the resource tags of
+// a given bucket (the source bucket for copies).
+func (s *Server) conditionContextFor(c *reqCtx, bkt *meta.Bucket) map[string][]string {
 	r := c.r
 	q := r.URL.Query()
 	m := map[string][]string{}
@@ -328,8 +339,8 @@ func (s *Server) conditionContext(c *reqCtx) map[string][]string {
 			m["s3:requestobjecttag/"+strings.ToLower(t.Key)] = []string{t.Value}
 		}
 	}
-	if c.bkt != nil {
-		for _, t := range c.bkt.Tags {
+	if bkt != nil {
+		for _, t := range bkt.Tags {
 			m["aws:resourcetag/"+strings.ToLower(t.Key)] = []string{t.Value}
 		}
 	}
@@ -548,5 +559,6 @@ func (s *Server) reauthorizeServed(c *reqCtx, o *meta.Object) error {
 		return errAccessDenied()
 	}
 	c.objMeta = o
+	c.r = c.r.WithContext(object.WithExpectedObject(c.r.Context(), o))
 	return nil
 }

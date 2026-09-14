@@ -319,10 +319,14 @@ func (s *Server) copyObject(c *reqCtx) error {
 	if sv != "" {
 		srcAction = "s3:GetObjectVersion"
 	}
-	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContext(c),
+	srcReq := iamRequest{Identity: c.identity, Action: srcAction, Bucket: sb, Key: sk, Conditions: s.conditionContextFor(c, srcBucket),
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
-	if so, err := s.obj.StatObject(r.Context(), sb, sk, sv); err == nil {
+	so, soErr := s.obj.StatObject(r.Context(), sb, sk, sv)
+	if soErr == nil {
 		applyObjectContext(&srcReq, so)
+		// The copy reads exactly the version authorised here.
+		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), so))
+		r = c.r
 	}
 	if !s.iam.Authorize(srcReq) {
 		return errAccessDenied()
@@ -333,6 +337,26 @@ func (s *Server) copyObject(c *reqCtx) error {
 	}
 	if err := s.authorizeAttributes(c, c.r.Header.Get); err != nil {
 		return err
+	}
+	// Tags copied from the source need s3:GetObjectTagging there and
+	// s3:PutObjectTagging here, as on AWS.
+	if soErr == nil && len(so.Tags) > 0 && !strings.EqualFold(r.Header.Get("x-amz-tagging-directive"), "REPLACE") {
+		tagReq := srcReq
+		tagReq.Action = "s3:GetObjectTagging"
+		if !s.iam.Authorize(tagReq) {
+			return s3err.New(s3err.AccessDenied).WithMessage("Access Denied: copying the source's tags requires s3:GetObjectTagging on the source")
+		}
+		if err := s.authorizeAttributes(c, func(h string) string {
+			if h == "x-amz-tagging" {
+				return "copied"
+			}
+			return ""
+		}); err != nil {
+			return err
+		}
+	}
+	if attrs.ACL != nil && c.bkt.PublicAccessBlock != nil && c.bkt.PublicAccessBlock.BlockPublicAcls && isPublicACL(attrs.ACL) {
+		return s3err.New(s3err.AccessDenied).WithMessage("Public ACLs are blocked by the BlockPublicAcls setting")
 	}
 	dir := strings.ToUpper(r.Header.Get("x-amz-metadata-directive"))
 	if dir != "" && dir != "COPY" && dir != "REPLACE" {

@@ -33,6 +33,10 @@ func (s *Service) CopyObject(ctx context.Context, actor Actor, in CopyInput) (*m
 		}
 		return nil, nil, err
 	}
+	if !sourceExpected(ctx, src.Object) {
+		src.Body.Close()
+		return nil, nil, errChanged()
+	}
 	defer src.Body.Close()
 	so := src.Object
 	if so.StorageClass == "GLACIER" || so.StorageClass == "DEEP_ARCHIVE" {

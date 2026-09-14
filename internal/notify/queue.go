@@ -28,7 +28,7 @@ type diskQueue struct {
 }
 
 func openDiskQueue(dir string, limit int) (*diskQueue, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	q := &diskQueue{dir: dir, limit: limit}
@@ -54,7 +54,7 @@ func (q *diskQueue) push(m *Message) (string, error) {
 	}
 	path := filepath.Join(q.dir, name)
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		q.dec()
 		return "", err
 	}
