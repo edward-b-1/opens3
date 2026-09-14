@@ -58,7 +58,7 @@ views.buckets = async function (main) {
 };
 
 views.bucketSettings = async function (main, name) {
-  const { h, badge, fmtDate, fmtBytes, confirm, jsonField, tagsField, toast, error } = ui;
+  const { h, badge, fmtDate, fmtBytes, confirm, field, jsonField, tagsField, toast, error } = ui;
   const b = await api.get('buckets/' + encodeURIComponent(name));
   const crumbs = h('div.breadcrumb', h('a', { href: '#/buckets' }, 'Buckets'), h('span.sep', '/'),
     h('a', { href: '#' + app.objectsHash(name, '') }, name), h('span.sep', '/'), h('span.cur', 'Settings'));
