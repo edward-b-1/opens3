@@ -100,4 +100,7 @@ Plaintext objects can be reassembled without OpenS3: read the object record
 from the database (`bbolt` CLI or any Go program using `go.etcd.io/bbolt`),
 then `cat data/<bucket>/<xx>/<blob>` for each part in order. The metadata
 JSON is readable by eye; `internal/meta/types.go` gives the field names.
-A `opens3 fsck`/export tool is planned for phase 2.
+`opens3 fsck check` verifies the whole directory against these rules
+and `opens3 fsck repair` fixes what is safe to fix; `opens3 export` writes
+every object out as a plain file, decrypting with the master key (user
+manual, chapter 8).

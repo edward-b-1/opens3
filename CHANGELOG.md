@@ -13,6 +13,16 @@ tagged tree.
 
 ## [Unreleased]
 
+### Added
+
+- `opens3 fsck check` and `opens3 fsck repair`: verify the data directory
+  against its metadata (files, sizes, and with `--verify` content;
+  pointers, indexes, interrupted bucket deletions) and repair what can be
+  repaired without losing data.
+- `opens3 export`: write objects out as plain files with a manifest,
+  decrypting SSE-S3 and SSE-KMS with the master key; `--all-versions`,
+  `--bucket`, `--prefix`.
+
 ## [0.1.1] - 2026-09-14
 
 Security release: see advisory OPENS3-2026-001 in `SECURITY.md`. The

@@ -81,6 +81,52 @@ deletes the file. To move the other way, unset `OPENS3_MASTER_KEY`, set
 `OPENS3_MASTER_KEY_OLD` to the current material and run `rotate`: it
 creates the file and re-wraps everything under it.
 
+## Checking the data directory
+
+`opens3 fsck check --root DIR` compares the metadata with the object
+files: every object version, multipart upload and part must have its
+file with the recorded size; every file must be referenced by something;
+the index records must agree with each other; no bucket may be stuck in
+deletion. It prints a report by problem kind and exits 1 when anything is
+wrong. It changes nothing, so it can run on a snapshot or a copy while
+the server runs; on the live directory the server must be stopped
+because it holds the database lock. `--verify` also reads every object
+and compares its content with the recorded ETag, decrypting SSE-S3 and
+SSE-KMS objects with the master key, which is the only test that catches
+silent corruption and takes as long as reading everything once. SSE-C
+objects cannot be verified because the server holds no key.
+
+`opens3 fsck repair --root DIR` fixes what can be fixed without losing
+data: it deletes files nothing references, deletes or recreates dangling
+pointers and indexes, removes part records for uploads that no longer
+exist or whose file is gone, finishes an interrupted bucket deletion, and
+recreates a missing bucket record so its objects become reachable again
+(owned by root, private). It never removes an object whose file is
+missing or damaged: those are reported, and stay visible so that a
+backup can be restored over them or the object deleted deliberately.
+`--dry-run` lists what would change.
+
+Run a check after any unclean shutdown or disk incident, and `--verify`
+on a schedule that suits the size of the store.
+
+## Exporting objects
+
+`opens3 export --root DIR --to OUTDIR` writes every object out as a plain
+file, `OUTDIR/<bucket>/<key>`, decrypting SSE-S3 and SSE-KMS objects with
+the master key. Nothing in OpenS3 is needed to read the result. A
+manifest, `OUTDIR/manifest.jsonl`, has one JSON line per object with its
+key, version, size, ETag, checksum, content type, metadata and tags, and
+says why an object was not written: delete markers, and SSE-C objects,
+whose key the server does not hold. `--bucket` and `--prefix` narrow the
+export; `--all-versions` writes older versions as `<key>@<versionId>`
+beside the current file; existing files in OUTDIR are kept unless
+`--overwrite` is given, so an interrupted export can be resumed. Keys
+that are not safe file paths (a `..` segment, for example) go under
+`<bucket>/_unsafe/` with the key in the manifest.
+
+This is the way out, and the last-resort recovery: it needs only the data
+directory and the master key, not a working server.
+
 ## Upgrades
 
 Stop, replace the binary, start. The on-disk format is versioned; a

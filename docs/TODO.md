@@ -18,12 +18,6 @@ Move an item to "Done" with the commit that closed it.
       certificate first; DNS-01 providers later if needed.
    3. Mutual TLS (client certificates), later.
 
-3. **`opens3 fsck` / export tool.** docs/FORMAT.md promises recoverability
-   without the server: walk the metadata, verify every referenced blob
-   exists with the right size (and checksum where stored), report orphan
-   blobs and dangling records, optionally repair, and export a bucket (or
-   everything) to plain files. Read-only mode must work on a live data
-   root's copy; repair needs the server stopped.
 4. **Audit log.** Structured JSON record per request (who, action, bucket,
    key, source address, status, latency, request id) to a file and/or
    webhook target; separate from access logging (PLAN phase 2).
@@ -50,6 +44,12 @@ Move an item to "Done" with the commit that closed it.
   migration work, which is deferred; do not start without agreement.
 
 ## Done
+
+- `opens3 fsck check | repair` (missing and mismatched files, orphan
+  files, dangling and missing pointers and indexes, orphan part records,
+  interrupted bucket deletions, records without a bucket; `--verify`
+  reads and hashes every object) and `opens3 export` (plain files plus a
+  manifest, decrypting SSE-S3/KMS, all versions on request).
 
 - TLS certificate reload without restart: files polled every minute,
   `SIGHUP` for an immediate reload, self-signed certificates regenerated

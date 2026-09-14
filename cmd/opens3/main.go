@@ -39,6 +39,10 @@ func main() {
 		os.Exit(runAdmin(os.Args[2:]))
 	case "master":
 		os.Exit(runMaster(os.Args[2:]))
+	case "fsck":
+		os.Exit(runFsck(os.Args[2:]))
+	case "export":
+		os.Exit(runExport(os.Args[2:]))
 	case "version":
 		fmt.Println(versionString())
 	case "-h", "--help", "help":
@@ -84,6 +88,8 @@ commands:
   server    run the object storage server
   admin     administer a running server (users, keys, policies, buckets)
   master    rotate the master key ring (server stopped)
+  fsck      check the data directory against its metadata; repair (server stopped)
+  export    write objects out as plain files (server stopped)
   version   print the version
 
 environment:
