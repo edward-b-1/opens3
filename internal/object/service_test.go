@@ -666,11 +666,17 @@ func TestRequestExpectations(t *testing.T) {
 	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "dst"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.CopyObject(WithExpectedSource(ctx, first), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); code(err) != s3err.NoSuchKey {
+	if _, _, err := s.CopyObject(WithExpectedSource(ctx, b, first), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); code(err) != s3err.NoSuchKey {
 		t.Fatalf("copying a replaced source: %v", err)
 	}
-	if _, _, err := s.CopyObject(WithExpectedSource(ctx, second), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); err != nil {
+	if _, _, err := s.CopyObject(WithExpectedSource(ctx, b, second), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c"}); err != nil {
 		t.Fatalf("copying the expected source: %v", err)
+	}
+	// A source bucket recreated under the same name is refused too.
+	other := *b
+	other.Created = b.Created.Add(time.Second)
+	if _, _, err := s.CopyObject(WithExpectedSource(ctx, &other, second), actor, CopyInput{SrcBucket: "expect", SrcKey: "k", DstBucket: "dst", DstKey: "c2"}); code(err) != s3err.NoSuchKey {
+		t.Fatalf("copying from a recreated source bucket: %v", err)
 	}
 	// A version delete guarded by sequence, and by expectation.
 	if _, err := s.DeleteObject(ctx, actor, DeleteInput{Bucket: "expect", Key: "k", VersionID: meta.NullVersionID, IfSeq: first.Seq}); code(err) != s3err.PreconditionFailed {

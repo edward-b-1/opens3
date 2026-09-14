@@ -393,16 +393,21 @@ func TestUploadAttributePermissions(t *testing.T) {
 	}
 	full.PutObjectLegalHold(e.ctx, &s3.PutObjectLegalHoldInput{Bucket: aws.String("attrs"), Key: aws.String("ok"), LegalHold: &types.ObjectLockLegalHold{Status: types.ObjectLockLegalHoldStatusOff}})
 
-	// Under the ACL model the grant that allows the upload covers what the
-	// uploader sets on its new object: a bucket owner with no policy
-	// beyond creating buckets can upload with an ACL and tags.
+	// Under the ACL model the grant that allows the upload covers the ACL
+	// the uploader sets on its new object (a bucket owner with no policy
+	// beyond creating buckets can upload with an ACL), but not tags, which
+	// always need s3:PutObjectTagging from a policy.
 	owner := e.managedUser("owner2", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:CreateBucket","s3:ListAllMyBuckets"],"Resource":"*"}]}`)
 	if _, err := owner.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("mine"), ObjectOwnership: types.ObjectOwnershipObjectWriter}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := owner.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("mine"), Key: aws.String("k"), Body: strings.NewReader("x"), ACL: types.ObjectCannedACLPublicRead, Tagging: aws.String("a=b")}); err != nil {
-		t.Fatalf("bucket owner upload with ACL and tags: %v", err)
+	if _, err := owner.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("mine"), Key: aws.String("k"), Body: strings.NewReader("x"), ACL: types.ObjectCannedACLPublicRead}); err != nil {
+		t.Fatalf("bucket owner upload with ACL: %v", err)
 	}
+	if _, err := owner.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("mine"), Key: aws.String("t"), Body: strings.NewReader("x"), Tagging: aws.String("a=b")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("ACL-granted upload with tags: %v", err)
+	}
+
 	if _, err := e.anon().GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("mine"), Key: aws.String("k")}); err != nil {
 		t.Fatalf("public-read ACL not applied: %v", err)
 	}

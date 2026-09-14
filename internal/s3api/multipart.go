@@ -121,7 +121,7 @@ func (s *Server) uploadPartCopy(c *reqCtx) error {
 		BucketOwner: srcBucket.Owner, BucketPolicy: srcBucket.Policy, BucketACL: srcBucket.ACL, PublicAccessBlock: srcBucket.PublicAccessBlock, Ownership: srcBucket.Ownership}
 	if so, err := s.obj.StatObject(r.Context(), sb, sk, sv); err == nil {
 		applyObjectContext(&srcReq, so)
-		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), so))
+		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), srcBucket, so))
 		r = c.r
 	}
 	if !s.iam.Authorize(srcReq) {

@@ -33,7 +33,8 @@ func (s *Service) CopyObject(ctx context.Context, actor Actor, in CopyInput) (*m
 		}
 		return nil, nil, err
 	}
-	if !sourceExpected(ctx, src.Object) {
+	srcBucket, err := s.GetBucket(ctx, in.SrcBucket)
+	if err != nil || !sourceExpected(ctx, srcBucket, src.Object) {
 		src.Body.Close()
 		return nil, nil, errChanged()
 	}
@@ -91,7 +92,7 @@ func (s *Service) UploadPartCopy(ctx context.Context, in UploadPartCopyInput) (*
 		return nil, nil, err
 	}
 	defer src.Body.Close()
-	if !sourceExpected(ctx, src.Object) {
+	if srcBucket, err := s.GetBucket(ctx, in.SrcBucket); err != nil || !sourceExpected(ctx, srcBucket, src.Object) {
 		return nil, nil, errChanged()
 	}
 	size := src.Object.Size

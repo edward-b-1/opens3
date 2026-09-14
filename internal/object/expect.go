@@ -23,6 +23,7 @@ type expectation struct {
 	bucketCreated time.Time // zero = no expectation
 	objectSeq     uint64    // 0 = no expectation
 	sourceSeq     uint64    // copy source, 0 = none
+	sourceBucket  time.Time // creation time of the copy source's bucket
 }
 
 func expectations(ctx context.Context) expectation {
@@ -51,13 +52,16 @@ func WithExpectedObject(ctx context.Context, o *meta.Object) context.Context {
 	return context.WithValue(ctx, expectKey{}, e)
 }
 
-// WithExpectedSource records the copy source version that was authorised.
-func WithExpectedSource(ctx context.Context, o *meta.Object) context.Context {
-	if o == nil {
-		return ctx
-	}
+// WithExpectedSource records the copy source bucket and version that
+// were authorised.
+func WithExpectedSource(ctx context.Context, b *meta.Bucket, o *meta.Object) context.Context {
 	e := expectations(ctx)
-	e.sourceSeq = o.Seq
+	if b != nil {
+		e.sourceBucket = b.Created
+	}
+	if o != nil {
+		e.sourceSeq = o.Seq
+	}
 	return context.WithValue(ctx, expectKey{}, e)
 }
 
@@ -75,8 +79,12 @@ func objectExpected(ctx context.Context, o *meta.Object) bool {
 	return e.objectSeq == 0 || (o != nil && o.Seq == e.objectSeq)
 }
 
-// sourceExpected reports whether o is the copy source that was authorised.
-func sourceExpected(ctx context.Context, o *meta.Object) bool {
+// sourceExpected reports whether b and o are the copy source bucket and
+// version that were authorised.
+func sourceExpected(ctx context.Context, b *meta.Bucket, o *meta.Object) bool {
 	e := expectations(ctx)
+	if !e.sourceBucket.IsZero() && (b == nil || !b.Created.Equal(e.sourceBucket)) {
+		return false
+	}
 	return e.sourceSeq == 0 || (o != nil && o.Seq == e.sourceSeq)
 }

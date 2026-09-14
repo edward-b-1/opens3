@@ -474,7 +474,7 @@ func (s *Server) authorizeAttributes(c *reqCtx, get func(string) string) error {
 		byACL   bool // an ACL grant of the upload covers it (AWS behaviour, per the conformance suite)
 	}{
 		{get("x-amz-acl") != "" || hasGrant, "s3:PutObjectAcl", true},
-		{get("x-amz-tagging") != "", "s3:PutObjectTagging", true},
+		{get("x-amz-tagging") != "", "s3:PutObjectTagging", false},
 		{get("x-amz-object-lock-mode") != "" || get("x-amz-object-lock-retain-until-date") != "", "s3:PutObjectRetention", false},
 		{get("x-amz-object-lock-legal-hold") != "", "s3:PutObjectLegalHold", false},
 	}
@@ -487,9 +487,10 @@ func (s *Server) authorizeAttributes(c *reqCtx, get func(string) string) error {
 		case g == iam.ByACL && ck.byACL:
 		case g == iam.NoGrant && c.grant == iam.ByACL && ck.byACL:
 			// The upload itself was granted by an ACL (bucket WRITE, or
-			// ownership). Under the ACL model that grant covers the ACL and
-			// tags the uploader sets on its own new object; Object Lock
-			// settings are policy-era features and always need a policy.
+			// ownership). Under the ACL model that grant covers the ACL the
+			// uploader sets on its own new object (the conformance suite
+			// expects this of AWS); tags and Object Lock settings are
+			// policy-era features and always need a policy grant.
 		default:
 			return s3err.New(s3err.AccessDenied).WithMessage("Access Denied: the request sets an attribute that requires %s", ck.action)
 		}

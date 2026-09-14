@@ -326,7 +326,7 @@ func (s *Server) copyObject(c *reqCtx) error {
 	if soErr == nil {
 		applyObjectContext(&srcReq, so)
 		// The copy reads exactly the version authorised here.
-		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), so))
+		c.r = c.r.WithContext(object.WithExpectedSource(c.r.Context(), srcBucket, so))
 		r = c.r
 	}
 	if !s.iam.Authorize(srcReq) {

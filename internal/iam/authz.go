@@ -203,7 +203,7 @@ func aclAllows(r Request) bool {
 	switch r.Action {
 	case "s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads", "s3:GetBucketLocation":
 		return has(r.BucketACL, r.BucketOwner, "READ")
-	case "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:AbortMultipartUpload", "s3:PutObjectTagging", "s3:DeleteObjectTagging":
+	case "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:AbortMultipartUpload":
 		return has(r.BucketACL, r.BucketOwner, "WRITE")
 	case "s3:GetBucketAcl":
 		return has(r.BucketACL, r.BucketOwner, "READ_ACP")

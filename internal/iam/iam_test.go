@@ -272,3 +272,36 @@ func TestConsolePasswords(t *testing.T) {
 		t.Fatalf("secret key %q", sk)
 	}
 }
+
+// TestBucketWriteACLDoesNotGrantTagging: bucket ACL WRITE maps to object
+// creation and deletion (AWS's ACL mapping), not to the tagging
+// operations, which need a policy; the bucket owner keeps them as the
+// resource owner.
+func TestBucketWriteACLDoesNotGrantTagging(t *testing.T) {
+	db, err := kv.OpenBolt(filepath.Join(t.TempDir(), "meta.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	st, err := Open(db, Config{RootAccessKey: "root", RootSecretKey: "rootsecret", Wrapper: kms.TestMaster()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("writer", "writersecret000", nil); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.Resolve("writer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acl := &meta.ACL{Owner: "owner", Grants: []meta.Grant{{Grantee: id.CanonicalID(), GranteeType: "CanonicalUser", Permission: "WRITE"}}}
+	req := func(action string) Request {
+		return Request{Identity: id, Action: action, Bucket: "b", Key: "k", BucketOwner: "owner", BucketACL: acl, Ownership: "ObjectWriter", Conditions: map[string][]string{}}
+	}
+	if !st.Authorize(req("s3:PutObject")) || !st.Authorize(req("s3:DeleteObject")) {
+		t.Fatal("bucket WRITE must allow object creation and deletion")
+	}
+	if st.Authorize(req("s3:PutObjectTagging")) || st.Authorize(req("s3:DeleteObjectTagging")) {
+		t.Fatal("bucket WRITE must not grant the tagging operations")
+	}
+}

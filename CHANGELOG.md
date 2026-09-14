@@ -33,6 +33,13 @@ on-disk format change (a new optional flag on console session records).
   version is bound. Copying tags needs `s3:PutObjectTagging` on the
   destination only (the source `s3:GetObjectTagging` requirement added
   in 0.2.0 was not AWS behaviour).
+- Copy sources are bound to the source bucket incarnation as well as the
+  object version; browser form uploads carry their bucket binding through
+  to the write.
+- Tags on an upload always need `s3:PutObjectTagging` from a policy, and
+  bucket ACL WRITE no longer grants the standalone tagging operations, per
+  AWS's ACL mapping (an ACL on an upload may still ride on an ACL grant,
+  which the conformance suite expects).
 - `opens3 fsck repair` refuses any path or bucket name in a report that
   would lead outside the data directory.
 - Console folder downloads skip object keys that would extract outside
