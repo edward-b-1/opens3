@@ -89,7 +89,8 @@ func (s *Server) postObject(c *reqCtx) error {
 	// Authorisation.
 	req := s.authzRequest(c, "s3:PutObject")
 	req.Key = key
-	if !s.iam.Authorize(req) {
+	c.grant = s.iam.Decide(req)
+	if !c.grant.Allowed() {
 		return errAccessDenied()
 	}
 	// Validate the policy conditions against the fields.
@@ -132,6 +133,17 @@ func (s *Server) postObject(c *reqCtx) error {
 			attrs.UserMeta[k[len("x-amz-meta-"):]] = v
 		}
 	}
+	if err := s.authorizeAttributes(c, func(h string) string {
+		switch h {
+		case "x-amz-acl":
+			return fields["acl"]
+		case "x-amz-tagging":
+			return fields["tagging"]
+		}
+		return fields[h]
+	}); err != nil {
+		return err
+	}
 	if t := fields["tagging"]; t != "" {
 		var tg xmlTagging
 		if err := xmlUnmarshal([]byte(t), &tg); err != nil {
@@ -158,6 +170,9 @@ func (s *Server) postObject(c *reqCtx) error {
 		ck, err := base64.StdEncoding.DecodeString(fields["x-amz-server-side-encryption-customer-key"])
 		if err != nil || len(ck) != 32 {
 			return errInvalidArg("The secret key was invalid for the specified algorithm.")
+		}
+		if !s.cfg.TrustedProxies.Secure(c.r) {
+			return errSSECPlaintext()
 		}
 		sseReq = object.SSERequest{Type: "SSE-C", CustomerKey: ck, CustomerKeyMD5: fields["x-amz-server-side-encryption-customer-key-md5"]}
 	}
@@ -211,7 +226,7 @@ func (s *Server) postObject(c *reqCtx) error {
 	if c.bkt.Versioning != "" {
 		h.Set("x-amz-version-id", o.VersionID)
 	}
-	loc := schemeOf(r) + "://" + r.Host + "/" + c.bucket + "/" + key
+	loc := s.schemeOf(r) + "://" + r.Host + "/" + c.bucket + "/" + key
 	h.Set("Location", loc)
 	if redir := fields["success_action_redirect"]; redir != "" {
 		u := redir

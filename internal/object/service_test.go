@@ -559,3 +559,83 @@ func TestBucketDeleteIsTwoPhase(t *testing.T) {
 		t.Fatalf("recreate after a clean delete: %v", err)
 	}
 }
+
+func TestCompleteUploadSeesPartsAtomically(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	actor := Actor{CanonicalID: "me"}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "atomic"}); err != nil {
+		t.Fatal(err)
+	}
+	u, err := s.CreateUpload(ctx, actor, CreateUploadInput{Bucket: "atomic", Key: "big"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p1, err := s.UploadPart(ctx, UploadPartInput{Bucket: "atomic", Key: "big", UploadID: u.UploadID, PartNumber: 1, Body: strings.NewReader("first"), Size: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Between completion's start and its transaction, part 1 is replaced
+	// with different content (its old file is deleted). Completion must see
+	// the replacement and refuse the stale ETag rather than commit an
+	// object pointing at the deleted file.
+	s.testBeforeCommit = func() {
+		s.testBeforeCommit = nil
+		if _, err := s.UploadPart(ctx, UploadPartInput{Bucket: "atomic", Key: "big", UploadID: u.UploadID, PartNumber: 1, Body: strings.NewReader("other"), Size: 5}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = s.CompleteUpload(ctx, actor, CompleteInput{Bucket: "atomic", Key: "big", UploadID: u.UploadID, ObjectSize: -1, Parts: []CompletePart{{PartNumber: 1, ETag: p1.ETag}}})
+	if code(err) != s3err.InvalidPart {
+		t.Fatalf("stale part accepted: %v", err)
+	}
+	if _, err := s.StatObject(ctx, "atomic", "big", ""); code(err) != s3err.NoSuchKey {
+		t.Fatalf("object committed from stale parts: %v", err)
+	}
+	// Completing with the replacement's ETag works and the data is readable.
+	_, parts, _, _ := s.ListParts(ctx, "atomic", "big", u.UploadID, 0, 0)
+	o, err := s.CompleteUpload(ctx, actor, CompleteInput{Bucket: "atomic", Key: "big", UploadID: u.UploadID, ObjectSize: -1, Parts: []CompletePart{{PartNumber: 1, ETag: parts[0].ETag}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.GetObject(ctx, GetInput{Bucket: "atomic", Key: "big"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if string(b) != "other" || o.Size != 5 {
+		t.Fatalf("completed object: %q", b)
+	}
+	// A part upload after completion is refused, and leaves no file behind.
+	if _, err := s.UploadPart(ctx, UploadPartInput{Bucket: "atomic", Key: "big", UploadID: u.UploadID, PartNumber: 2, Body: strings.NewReader("late"), Size: 4}); code(err) != s3err.NoSuchUpload {
+		t.Fatalf("late part: %v", err)
+	}
+}
+
+func TestDeleteIfSeq(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	actor := Actor{CanonicalID: "me"}
+	if _, err := s.CreateBucket(ctx, actor, CreateBucketInput{Name: "ifseq"}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.PutObject(ctx, actor, PutInput{Bucket: "ifseq", Key: "k", Body: strings.NewReader("same"), Size: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A same-content replacement keeps the ETag but not the sequence.
+	second, err := s.PutObject(ctx, actor, PutInput{Bucket: "ifseq", Key: "k", Body: strings.NewReader("same"), Size: 4})
+	if err != nil || second.ETag != first.ETag || second.Seq == first.Seq {
+		t.Fatalf("replacement: %v etag=%s/%s seq=%d/%d", err, first.ETag, second.ETag, first.Seq, second.Seq)
+	}
+	if _, err := s.DeleteObject(ctx, actor, DeleteInput{Bucket: "ifseq", Key: "k", IfSeq: first.Seq}); code(err) != s3err.PreconditionFailed {
+		t.Fatalf("stale-sequence delete: %v", err)
+	}
+	if _, err := s.StatObject(ctx, "ifseq", "k", ""); err != nil {
+		t.Fatal("fresh object deleted on stale scan data")
+	}
+	if _, err := s.DeleteObject(ctx, actor, DeleteInput{Bucket: "ifseq", Key: "k", IfSeq: second.Seq}); err != nil {
+		t.Fatalf("matching-sequence delete: %v", err)
+	}
+}

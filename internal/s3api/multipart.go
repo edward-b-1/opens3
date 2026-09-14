@@ -18,6 +18,9 @@ func (s *Server) createMultipartUpload(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
+	if err := s.authorizeAttributes(c, c.r.Header.Get); err != nil {
+		return err
+	}
 	sseReq, err := parseSSEHeaders(r, false)
 	if err != nil {
 		return err
@@ -202,7 +205,7 @@ func (s *Server) completeMultipartUpload(c *reqCtx) error {
 		h.Set("x-amz-version-id", o.VersionID)
 	}
 	setSSEResponseHeaders(h, o)
-	loc := schemeOf(r) + "://" + r.Host + "/" + c.bucket + "/" + c.key
+	loc := s.schemeOf(r) + "://" + r.Host + "/" + c.bucket + "/" + c.key
 	out := xmlCompleteMultipartUploadResult{Xmlns: s3NS, Location: loc, Bucket: c.bucket, Key: c.key, ETag: quoteETag(o.ETag)}
 	if o.Checksum != nil {
 		setChecksumField(&out.ChecksumCRC32, &out.ChecksumCRC32C, &out.ChecksumSHA1, &out.ChecksumSHA256, &out.ChecksumCRC64NVME, o.Checksum)
@@ -211,8 +214,8 @@ func (s *Server) completeMultipartUpload(c *reqCtx) error {
 	return s.writeXML(c, http.StatusOK, out)
 }
 
-func schemeOf(r *http.Request) string {
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+func (s *Server) schemeOf(r *http.Request) string {
+	if s.cfg.TrustedProxies.Secure(r) {
 		return "https"
 	}
 	return "http"

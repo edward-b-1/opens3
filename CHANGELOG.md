@@ -44,6 +44,27 @@ with more than one identity.
   `s3:GetObjectVersion`; DeleteObjects no longer requires a bucket-level
   `s3:DeleteObject` before its per-key checks, so object-scoped policies
   work.
+- `X-Forwarded-Proto` and `X-Forwarded-For` are believed only from
+  reverse proxies listed in `OPENS3_TRUSTED_PROXIES` / `--trusted-proxies`
+  (default none); before, any client could satisfy `aws:SecureTransport`
+  over plain HTTP by sending the header. SSE-C requests (object or copy
+  source, including browser form uploads) are refused over a connection
+  that is not secure, as on AWS; the guard was previously never enabled
+  and covered only PUT.
+- Setting an ACL, tags, a retention period or a legal hold on an upload
+  (PutObject, CopyObject, CreateMultipartUpload, browser form upload) now
+  needs the permission for that attribute (`s3:PutObjectAcl`,
+  `s3:PutObjectTagging`, `s3:PutObjectRetention`, `s3:PutObjectLegalHold`),
+  as on AWS; before, `s3:PutObject` alone let a write-only identity create
+  a public-read object.
+- CompleteMultipartUpload reads the part list inside the transaction that
+  writes the object, so a part re-uploaded during completion can no longer
+  leave the object pointing at a deleted file.
+- Lifecycle expiry guards its delete by the object's sequence rather than
+  its ETag, so a same-content replacement written after the scan is not
+  expired on stale data.
+- The data directory, metadata directory and object files are created
+  owner-only (0700 / 0600); they were world-readable before.
 - Bucket deletion marks the record as deleting until the data directory
   is gone (finished at start after a crash); the name cannot be recreated
   meanwhile, and an upload authorised against a deleted bucket cannot

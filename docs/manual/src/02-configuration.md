@@ -15,6 +15,7 @@ default.
 | `--enforce-region` | off | Reject signatures whose credential scope names another region. Off means any region is accepted, as most S3-compatible servers do. |
 | `--tls self-signed` | | Serve HTTPS with a certificate the server generates and keeps under the data root (see below). |
 | `--tls-cert FILE`, `--tls-key FILE` | | Serve HTTPS with your own certificate (see below). |
+| `--trusted-proxies LIST` | none | Reverse proxies (IPs or CIDR ranges, comma-separated) whose `X-Forwarded-Proto` and `X-Forwarded-For` headers are believed (see "Behind a reverse proxy"). |
 | `--no-fsync` | off | Skip fsync on writes. Only for benchmarks and tests: a crash can lose acknowledged data. |
 | `--log-level LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `--log-json` | off | Structured JSON log lines instead of text. |
@@ -27,7 +28,7 @@ default.
 | `OPENS3_MASTER_KEY` | Optional master key material, at least 32 characters of random data (`openssl rand -base64 32`). When set, the key file is not used. See chapter 5. |
 | `OPENS3_MASTER_KEY_NEW`, `OPENS3_MASTER_KEY_OLD` | Read only by `opens3 master` when rotating an environment key (chapter 8). |
 | `OPENS3_ROOT`, `OPENS3_ADDRESS`, `OPENS3_REGION` | Same as the flags. |
-| `OPENS3_TLS`, `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY` | Same as the flags. |
+| `OPENS3_TLS`, `OPENS3_TLS_CERT`, `OPENS3_TLS_KEY`, `OPENS3_TRUSTED_PROXIES` | Same as the flags. |
 | `OPENS3_HSTS`, `OPENS3_NO_HSTS` | `Strict-Transport-Security` is sent over TLS only when the certificate is not self-signed; `OPENS3_HSTS=1` forces it on, `OPENS3_NO_HSTS=1` forces it off. |
 | `OPENS3_DOMAINS` | Comma-separated domains for virtual-host addressing: a request to `mybucket.s3.example.com` selects `mybucket`. |
 | `OPENS3_ACCOUNT_ID` | The 12-digit account ID in ARNs (`arn:aws:iam::<id>:user/alice`). Default `000000000000`. |
@@ -110,6 +111,35 @@ is a common arrangement. If you make your own certificate with openssl
 rather than `--tls self-signed`, include every name and address clients
 will use as subject alternative names, and the bucket wildcard when you
 use virtual-host addressing.
+
+## Behind a reverse proxy
+
+A reverse proxy that terminates TLS (nginx, Caddy, Traefik, a cloud load
+balancer) talks plain HTTP to OpenS3 and describes the client's
+connection in two headers: `X-Forwarded-Proto` (`https` when the client's
+connection was encrypted) and `X-Forwarded-For` (the client's address).
+Those headers are only true when they come from the proxy, so OpenS3
+believes them only from addresses you list:
+
+```sh
+OPENS3_TRUSTED_PROXIES=10.0.0.5,10.0.1.0/24 opens3 server --root /var/lib/opens3
+```
+
+From any other address the headers are ignored and the connection is
+judged by itself: plain HTTP is plain HTTP, and the peer address is the
+client address. With no trusted proxies (the default) that is true for
+every connection.
+
+What the judgement affects: the `aws:SecureTransport` policy condition
+(a policy that requires it denies plain-HTTP clients), `aws:SourceIp`
+(the client address a policy sees), SSE-C (customer-provided keys are
+refused over a connection that is not secure, as on AWS), the `Location`
+of a completed multipart upload, and the `Secure` flag on console
+cookies.
+
+Behind a trusted proxy the proxy must set both headers itself and drop
+any it received from the client, which every common proxy does by
+default.
 
 ## Virtual-host addressing
 

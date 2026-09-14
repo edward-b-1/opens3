@@ -32,6 +32,7 @@ import (
 	"github.com/edward-b-1/opens3/internal/kms"
 	"github.com/edward-b-1/opens3/internal/meta"
 	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/proxy"
 	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
@@ -58,6 +59,8 @@ type Deps struct {
 	Log     *slog.Logger
 	Region  string
 	Version string
+	// TrustedProxies decide whether X-Forwarded-Proto is believed.
+	TrustedProxies proxy.Trusted
 }
 
 // Handler serves the console.
@@ -327,7 +330,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: ak + "." + token, Path: Prefix, Expires: exp,
-		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isTLS(r)})
+		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: h.isTLS(r)})
 	h.d.Log.Info("console login", "user", id.Name(), "session", ak)
 	s := &session{id: h.sessionIdentity(id, ak), accessKey: ak}
 	writeJSON(w, http.StatusOK, h.meInfo(s, exp))
@@ -352,7 +355,7 @@ func looksLikeKeyPair(user, password string) bool {
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request, s *session) error {
 	_ = h.d.IAM.DeleteKey(s.accessKey)
-	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: "", Path: Prefix, MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isTLS(r)})
+	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: "", Path: Prefix, MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: h.isTLS(r)})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
 }
@@ -392,9 +395,7 @@ func (h *Handler) sessionIdentity(id *iam.Identity, ak string) *iam.Identity {
 	return id
 }
 
-func isTLS(r *http.Request) bool {
-	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
-}
+func (h *Handler) isTLS(r *http.Request) bool { return h.d.TrustedProxies.Secure(r) }
 
 type meResponse struct {
 	User        string     `json:"user"`

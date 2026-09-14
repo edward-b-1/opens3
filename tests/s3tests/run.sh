@@ -83,7 +83,9 @@ log "creating users in $DATA"
 eval "$(cd "$REPO" && go run ./tests/s3tests/mkusers -root "$DATA" -alt-user "$ALT_USER" -alt-secret "$ALT_SECRET" -tenant-user "$TENANT_USER" -tenant-secret "$TENANT_SECRET")"
 
 SERVER_LOG="$RESULTS/server.log"
-"$BIN" server --root "$DATA" --address "127.0.0.1:$PORT" --no-fsync --log-level "${S3TESTS_LOG_LEVEL:-warn}" >"$SERVER_LOG" 2>&1 &
+# TLS: the suite's SSE-C tests need a secure connection, as on AWS. The
+# server generates its own certificate; the suite skips verification.
+"$BIN" server --root "$DATA" --address "127.0.0.1:$PORT" --tls self-signed --no-fsync --log-level "${S3TESTS_LOG_LEVEL:-warn}" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null || true
@@ -92,7 +94,7 @@ cleanup() {
 }
 trap cleanup EXIT
 for _ in $(seq 1 100); do
-  if curl -fs "http://127.0.0.1:$PORT/opens3/health/ready" >/dev/null 2>&1; then break; fi
+  if [ -s "$DATA/tls/tls.crt" ] && curl -fs --cacert "$DATA/tls/tls.crt" "https://127.0.0.1:$PORT/opens3/health/ready" >/dev/null 2>&1; then break; fi
   kill -0 "$SERVER_PID" 2>/dev/null || { log "server exited early:"; cat "$SERVER_LOG" >&2; exit 1; }
   sleep 0.1
 done
@@ -104,7 +106,7 @@ cat >"$CONF" <<CONF
 [DEFAULT]
 host = 127.0.0.1
 port = $PORT
-is_secure = False
+is_secure = True
 ssl_verify = False
 
 [fixtures]
@@ -183,9 +185,13 @@ rm -f "$JUNIT"
 log "running pytest: -m \"$S3TESTS_MARKERS\" ${ARGS[*]}"
 START=$(date +%s)
 set +e
+# Tests that use `requests` directly (browser POST uploads) verify TLS
+# regardless of ssl_verify, so they get the server's certificate as CA.
+cp "$DATA/tls/tls.crt" "$RESULTS/tls.crt"
 docker run --rm --network host \
   -v "$SRC:/s3-tests" -v "$RESULTS:/out" \
   -e S3TEST_CONF=/out/s3tests.conf -e PYTHONDONTWRITEBYTECODE=1 \
+  -e REQUESTS_CA_BUNDLE=/out/tls.crt -e SSL_CERT_FILE=/out/tls.crt \
   "$IMAGE" \
   python -m pytest -p no:cacheprovider -q -rfE --tb=line \
     --timeout="$S3TESTS_TIMEOUT" --junit-xml=/out/results.xml \

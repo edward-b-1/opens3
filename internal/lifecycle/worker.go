@@ -283,9 +283,10 @@ func (w *Worker) apply(ctx context.Context, b *meta.Bucket, c candidate, now tim
 	switch c.action.Kind {
 	case KindExpireCurrent:
 		// No VersionID: an unversioned bucket deletes permanently, a
-		// versioned one inserts a delete marker. IfMatch guards against
-		// the key having been overwritten since the scan.
-		res, err := w.obj.DeleteObject(ctx, Actor, object.DeleteInput{Bucket: b.Name, Key: o.Key, IfMatch: o.ETag})
+		// versioned one inserts a delete marker. IfSeq guards against the
+		// key having been overwritten since the scan (an ETag would not:
+		// a same-content replacement shares it).
+		res, err := w.obj.DeleteObject(ctx, Actor, object.DeleteInput{Bucket: b.Name, Key: o.Key, IfSeq: o.Seq})
 		if err != nil {
 			w.failed(log, err, st)
 			return

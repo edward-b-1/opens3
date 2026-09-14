@@ -18,6 +18,7 @@ import (
 	"github.com/edward-b-1/opens3/internal/kms"
 	"github.com/edward-b-1/opens3/internal/meta"
 	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/proxy"
 	"github.com/edward-b-1/opens3/internal/s3err"
 )
 
@@ -31,8 +32,10 @@ type Config struct {
 	EnforceRegion bool
 	// HostID is returned in error responses.
 	HostID string
-	// RequireTLSForSSEC rejects SSE-C over plaintext connections (AWS does).
-	RequireTLSForSSEC bool
+	// TrustedProxies are the addresses whose X-Forwarded-Proto and
+	// X-Forwarded-For headers are believed (a reverse proxy terminating
+	// TLS). From anywhere else the connection is judged by itself.
+	TrustedProxies proxy.Trusted
 	// DefaultOwnership is the Object Ownership setting applied to buckets
 	// created without x-amz-object-ownership. AWS defaults to
 	// BucketOwnerEnforced (ACLs disabled); set ObjectWriter for legacy
@@ -95,6 +98,8 @@ type reqCtx struct {
 	startTime time.Time
 	// Extra values for the object-level authorisation.
 	objMeta *meta.Object
+	// grant is how the operation's own authorisation was decided.
+	grant   iam.Grant
 	status  int
 	written int64
 }
@@ -185,6 +190,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	// CORS preflight needs no auth.
 	if c.op.name == "PreflightOptions" {
 		s.handlePreflight(c)
+		return
+	}
+	if hasSSECHeaders(c.r) && !s.cfg.TrustedProxies.Secure(c.r) {
+		// AWS: customer-provided keys never travel in the clear.
+		s.writeError(c, errSSECPlaintext())
 		return
 	}
 	if err := s.authenticate(c); err != nil {

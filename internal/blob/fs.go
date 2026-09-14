@@ -23,7 +23,7 @@ type FS struct {
 // commits do not call fsync (only for tests and benchmarks).
 func OpenFS(root string, fsync bool) (*FS, error) {
 	for _, d := range []string{"data", "tmp"} {
-		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			return nil, err
 		}
 	}
@@ -45,7 +45,7 @@ func (f *FS) path(bucket, id string) string {
 func (f *FS) Create(ctx context.Context, bucket string) (Writer, error) {
 	id := meta.NewID()
 	tmp := filepath.Join(f.root, "tmp", id)
-	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (w *fsWriter) Commit() (string, int64, error) {
 		return "", 0, err
 	}
 	dst := w.fs.path(w.bucket, w.id)
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		os.Remove(w.tmp)
 		return "", 0, err
 	}

@@ -72,6 +72,11 @@ headers overrides the default.
 
 ## SSE-C: keys the server never sees
 
+SSE-C requests are accepted only over a secure connection: TLS to the
+server, or plain HTTP from a trusted reverse proxy that reports the
+client used TLS (chapter 2). Over anything else they are refused with
+`InvalidRequest`, because the key travels in the request headers.
+
 SSE-C cannot be a bucket default, because a default is what applies when
 the client sends nothing, and with SSE-C there is no key to apply. What you
 can do is require it, with a bucket policy that denies uploads lacking the

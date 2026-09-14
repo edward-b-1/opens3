@@ -11,7 +11,7 @@ var Version = "dev"
 
 func init() {
 	RegisterExtension(func(s *Server) error {
-		s.Ext["console"] = console.New(console.Deps{IAM: s.IAM, Obj: s.Obj, KMS: s.KMS, Log: s.Log(), Region: s.Config().Region, Version: Version})
+		s.Ext["console"] = console.New(console.Deps{IAM: s.IAM, Obj: s.Obj, KMS: s.KMS, Log: s.Log(), Region: s.Config().Region, Version: Version, TrustedProxies: s.trusted})
 		return nil
 	})
 	RegisterMount(func(s *Server, mux *http.ServeMux) {

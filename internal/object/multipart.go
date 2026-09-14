@@ -212,94 +212,11 @@ func (s *Service) CompleteUpload(ctx context.Context, actor Actor, in CompleteIn
 	if err != nil {
 		return nil, err
 	}
-	var stored []meta.Part
-	err = s.kv.View(func(tx kv.Txn) error {
-		var err error
-		stored, err = meta.ListParts(tx, in.Bucket, in.UploadID, 0, 0)
-		return err
-	})
-	if err != nil {
-		return nil, err
+	var replaced, o *meta.Object
+	var unused, parts []meta.Part
+	if s.testBeforeCommit != nil {
+		s.testBeforeCommit()
 	}
-	byNum := map[int]meta.Part{}
-	for _, p := range stored {
-		byNum[p.Number] = p
-	}
-	var parts []meta.Part
-	var total int64
-	md5s := md5.New()
-	var partSums [][]byte
-	var sizes []int64
-	last := 0
-	for _, cp := range in.Parts {
-		if cp.PartNumber <= last {
-			return nil, s3err.New(s3err.InvalidPartOrder)
-		}
-		last = cp.PartNumber
-	}
-	for i, cp := range in.Parts {
-		p, ok := byNum[cp.PartNumber]
-		if !ok {
-			return nil, s3err.New(s3err.InvalidPart).WithExtra("PartNumber", itoa(int64(cp.PartNumber)))
-		}
-		if !etagMatches(cp.ETag, p.ETag) || cp.ETag == "*" {
-			return nil, s3err.New(s3err.InvalidPart).WithExtra("PartNumber", itoa(int64(cp.PartNumber)))
-		}
-		if i < len(in.Parts)-1 && p.Size < MinPartSize {
-			return nil, s3err.New(s3err.EntityTooSmall).WithExtra("PartNumber", itoa(int64(cp.PartNumber))).WithExtra("MinSizeAllowed", itoa(MinPartSize))
-		}
-		if u.ChecksumAlgorithm != "" {
-			if cp.Checksum != "" && cp.Checksum != p.Checksum {
-				return nil, s3err.New(s3err.InvalidPart).WithMessage("One or more of the specified parts could not be found. The part may not have been uploaded, or the specified checksum may not match the part's checksum.")
-			}
-			raw, _ := checksum.Decode(u.ChecksumAlgorithm, p.Checksum)
-			partSums = append(partSums, raw)
-			sizes = append(sizes, p.Size)
-		}
-		raw, _ := hex.DecodeString(p.ETag)
-		md5s.Write(raw)
-		total += p.Size
-		parts = append(parts, p)
-	}
-	if in.ObjectSize >= 0 && in.ObjectSize != total {
-		return nil, s3err.New(s3err.InvalidRequest).WithMessage("The provided 'x-amz-mp-object-size' header value does not match what was computed.")
-	}
-	if total > MaxObjectSize {
-		return nil, s3err.New(s3err.EntityTooLarge)
-	}
-	seq := s.seq.Next()
-	o := &meta.Object{Bucket: in.Bucket, Key: in.Key, Seq: seq, Size: total, ETag: fmtETag(len(parts), hex.EncodeToString(md5s.Sum(nil))),
-		ModTime: time.Now().UTC(), Owner: u.Owner, OwnerDisplay: u.OwnerDisplay, Parts: parts, SSE: u.SSE}
-	o.ContentType, o.ContentEncoding, o.ContentDisposition, o.ContentLanguage = u.ContentType, u.ContentEncoding, u.ContentDisposition, u.ContentLanguage
-	o.CacheControl, o.Expires, o.WebsiteRedirect, o.UserMeta, o.Tags, o.StorageClass, o.ACL = u.CacheControl, u.Expires, u.WebsiteRedirect, u.UserMeta, u.Tags, u.StorageClass, u.ACL
-	o.Retention, o.LegalHold = u.Retention, u.LegalHold
-	if u.ChecksumAlgorithm != "" {
-		var sum []byte
-		if u.ChecksumType == checksum.FullObject {
-			sum, err = checksum.CombineCRC(u.ChecksumAlgorithm, partSums, sizes)
-		} else {
-			sum, err = checksum.CompositeOf(u.ChecksumAlgorithm, partSums)
-		}
-		if err != nil {
-			return nil, err
-		}
-		val := checksum.Encode(sum)
-		if u.ChecksumType == checksum.Composite {
-			val = val + "-" + itoa(int64(len(parts)))
-		}
-		o.Checksum = &meta.Checksum{Algorithm: u.ChecksumAlgorithm, Value: val, Type: u.ChecksumType}
-		if in.Checksum != nil && in.Checksum.Value != "" && checksum.Normalize(in.Checksum.Algorithm) == u.ChecksumAlgorithm {
-			want := in.Checksum.Value
-			if u.ChecksumType == checksum.Composite && !strings.Contains(want, "-") {
-				want = want + "-" + itoa(int64(len(parts)))
-			}
-			if want != val {
-				return nil, s3err.New(s3err.BadDigest).WithMessage("The %s you specified did not match the calculated checksum.", u.ChecksumAlgorithm)
-			}
-		}
-	}
-	var replaced *meta.Object
-	var unused []meta.Part
 	err = s.kv.Update(func(tx kv.Txn) error {
 		seen := b
 		b, err := meta.GetBucket(tx, in.Bucket)
@@ -311,10 +228,17 @@ func (s *Service) CompleteUpload(ctx context.Context, actor Actor, in CompleteIn
 		if _, err := meta.GetUpload(tx, in.Bucket, in.Key, in.UploadID); err != nil {
 			return s3err.New(s3err.NoSuchUpload)
 		}
+		stored, err := meta.ListParts(tx, in.Bucket, in.UploadID, 0, 0)
+		if err != nil {
+			return err
+		}
+		if o, parts, err = s.assemble(u, in, stored); err != nil {
+			return err
+		}
 		if err := checkWriteConditions(tx, in.Bucket, in.Key, in.Conditions); err != nil {
 			return err
 		}
-		o.VersionID = s.versionIDFor(b, seq)
+		o.VersionID = s.versionIDFor(b, o.Seq)
 		all, err := meta.DeleteUpload(tx, u)
 		if err != nil {
 			return err
@@ -340,6 +264,92 @@ func (s *Service) CompleteUpload(ctx context.Context, actor Actor, in CompleteIn
 	}
 	s.emit(Event{Name: "s3:ObjectCreated:CompleteMultipartUpload", Bucket: b, Object: o, Key: o.Key, VersionID: o.VersionID, Actor: actor})
 	return o, nil
+}
+
+// assemble validates the client's part list against the stored parts and
+// builds the object record. It runs inside the completing transaction so
+// that a part replaced between the check and the commit cannot leave the
+// object pointing at a deleted file.
+func (s *Service) assemble(u *meta.Upload, in CompleteInput, stored []meta.Part) (*meta.Object, []meta.Part, error) {
+	var err error
+	byNum := map[int]meta.Part{}
+	for _, p := range stored {
+		byNum[p.Number] = p
+	}
+	var parts []meta.Part
+	var total int64
+	md5s := md5.New()
+	var partSums [][]byte
+	var sizes []int64
+	last := 0
+	for _, cp := range in.Parts {
+		if cp.PartNumber <= last {
+			return nil, nil, s3err.New(s3err.InvalidPartOrder)
+		}
+		last = cp.PartNumber
+	}
+	for i, cp := range in.Parts {
+		p, ok := byNum[cp.PartNumber]
+		if !ok {
+			return nil, nil, s3err.New(s3err.InvalidPart).WithExtra("PartNumber", itoa(int64(cp.PartNumber)))
+		}
+		if !etagMatches(cp.ETag, p.ETag) || cp.ETag == "*" {
+			return nil, nil, s3err.New(s3err.InvalidPart).WithExtra("PartNumber", itoa(int64(cp.PartNumber)))
+		}
+		if i < len(in.Parts)-1 && p.Size < MinPartSize {
+			return nil, nil, s3err.New(s3err.EntityTooSmall).WithExtra("PartNumber", itoa(int64(cp.PartNumber))).WithExtra("MinSizeAllowed", itoa(MinPartSize))
+		}
+		if u.ChecksumAlgorithm != "" {
+			if cp.Checksum != "" && cp.Checksum != p.Checksum {
+				return nil, nil, s3err.New(s3err.InvalidPart).WithMessage("One or more of the specified parts could not be found. The part may not have been uploaded, or the specified checksum may not match the part's checksum.")
+			}
+			raw, _ := checksum.Decode(u.ChecksumAlgorithm, p.Checksum)
+			partSums = append(partSums, raw)
+			sizes = append(sizes, p.Size)
+		}
+		raw, _ := hex.DecodeString(p.ETag)
+		md5s.Write(raw)
+		total += p.Size
+		parts = append(parts, p)
+	}
+	if in.ObjectSize >= 0 && in.ObjectSize != total {
+		return nil, nil, s3err.New(s3err.InvalidRequest).WithMessage("The provided 'x-amz-mp-object-size' header value does not match what was computed.")
+	}
+	if total > MaxObjectSize {
+		return nil, nil, s3err.New(s3err.EntityTooLarge)
+	}
+	seq := s.seq.Next()
+	o := &meta.Object{Bucket: in.Bucket, Key: in.Key, Seq: seq, Size: total, ETag: fmtETag(len(parts), hex.EncodeToString(md5s.Sum(nil))),
+		ModTime: time.Now().UTC(), Owner: u.Owner, OwnerDisplay: u.OwnerDisplay, Parts: parts, SSE: u.SSE}
+	o.ContentType, o.ContentEncoding, o.ContentDisposition, o.ContentLanguage = u.ContentType, u.ContentEncoding, u.ContentDisposition, u.ContentLanguage
+	o.CacheControl, o.Expires, o.WebsiteRedirect, o.UserMeta, o.Tags, o.StorageClass, o.ACL = u.CacheControl, u.Expires, u.WebsiteRedirect, u.UserMeta, u.Tags, u.StorageClass, u.ACL
+	o.Retention, o.LegalHold = u.Retention, u.LegalHold
+	if u.ChecksumAlgorithm != "" {
+		var sum []byte
+		if u.ChecksumType == checksum.FullObject {
+			sum, err = checksum.CombineCRC(u.ChecksumAlgorithm, partSums, sizes)
+		} else {
+			sum, err = checksum.CompositeOf(u.ChecksumAlgorithm, partSums)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		val := checksum.Encode(sum)
+		if u.ChecksumType == checksum.Composite {
+			val = val + "-" + itoa(int64(len(parts)))
+		}
+		o.Checksum = &meta.Checksum{Algorithm: u.ChecksumAlgorithm, Value: val, Type: u.ChecksumType}
+		if in.Checksum != nil && in.Checksum.Value != "" && checksum.Normalize(in.Checksum.Algorithm) == u.ChecksumAlgorithm {
+			want := in.Checksum.Value
+			if u.ChecksumType == checksum.Composite && !strings.Contains(want, "-") {
+				want = want + "-" + itoa(int64(len(parts)))
+			}
+			if want != val {
+				return nil, nil, s3err.New(s3err.BadDigest).WithMessage("The %s you specified did not match the calculated checksum.", u.ChecksumAlgorithm)
+			}
+		}
+	}
+	return o, parts, nil
 }
 
 // AbortUpload discards an upload and its parts.

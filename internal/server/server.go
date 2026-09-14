@@ -24,6 +24,7 @@ import (
 	"github.com/edward-b-1/opens3/internal/kms"
 	"github.com/edward-b-1/opens3/internal/kv"
 	"github.com/edward-b-1/opens3/internal/object"
+	"github.com/edward-b-1/opens3/internal/proxy"
 	"github.com/edward-b-1/opens3/internal/s3api"
 )
 
@@ -50,11 +51,14 @@ type Config struct {
 	// browsers remember it for the whole host name for two years and a
 	// self-signed certificate usually means an experimental setup. HSTS
 	// forces it on; NoHSTS forces it off.
-	HSTS          bool
-	NoHSTS        bool
-	EnforceRegion bool
-	NoFsync       bool
-	AccountID     string
+	HSTS   bool
+	NoHSTS bool
+	// TrustedProxies lists reverse proxies (IPs or CIDRs) whose
+	// X-Forwarded-Proto / X-Forwarded-For headers are believed.
+	TrustedProxies []string
+	EnforceRegion  bool
+	NoFsync        bool
+	AccountID      string
 	// DefaultOwnership for new buckets: BucketOwnerEnforced (AWS default,
 	// ACLs disabled) or ObjectWriter / BucketOwnerPreferred (ACLs enabled).
 	DefaultOwnership string
@@ -96,6 +100,8 @@ type Server struct {
 	addr atomic.Value // net.Addr once listening
 	// certs owns the TLS certificate in service (nil when TLS is off).
 	certs *certSource
+	// trusted is the parsed TrustedProxies.
+	trusted proxy.Trusted
 	// Registry is the Prometheus registry for subsystem metrics.
 	Registry *prometheus.Registry
 	// Ext holds subsystem state keyed by name (set by extensions).
@@ -129,7 +135,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Region == "" {
 		cfg.Region = "us-east-1"
 	}
-	if err := os.MkdirAll(cfg.Root, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.Root, 0o700); err != nil {
 		return nil, err
 	}
 	db, err := kv.OpenBolt(filepath.Join(cfg.Root, "meta", "opens3.db"))
@@ -180,8 +186,15 @@ func New(cfg Config) (*Server, error) {
 	} else if n > 0 {
 		cfg.Log.Info("finished interrupted bucket deletions", "buckets", n)
 	}
-	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID(), DefaultOwnership: cfg.DefaultOwnership}, cfg.Log)
-	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry(), Ext: map[string]any{}}
+	trusted, err := proxy.Parse(cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	api := s3api.New(obj, ia, k, s3api.Config{Region: cfg.Region, Domains: cfg.Domains, EnforceRegion: cfg.EnforceRegion, HostID: hostID(), DefaultOwnership: cfg.DefaultOwnership, TrustedProxies: trusted}, cfg.Log)
+	s := &Server{cfg: cfg, log: cfg.Log, kv: db, blob: bs, KMS: k, IAM: ia, Obj: obj, API: api, reg: prometheus.NewRegistry(), Ext: map[string]any{}, trusted: trusted}
+	if len(trusted) > 0 {
+		cfg.Log.Info("trusted proxies", "addresses", cfg.TrustedProxies)
+	}
 	s.mx = newMetrics(s.reg)
 	api.OnRequest = s.mx.observe
 	s.Registry = s.reg
@@ -333,6 +346,11 @@ func ConfigFromEnv(cfg Config, explicit map[string]bool) Config {
 	cfg.DefaultOwnership = get("DEFAULT_OBJECT_OWNERSHIP", cfg.DefaultOwnership)
 	if d := get("DOMAINS", ""); d != "" {
 		cfg.Domains = strings.Split(d, ",")
+	}
+	if !explicit["trusted-proxies"] {
+		if p := get("TRUSTED_PROXIES", ""); p != "" {
+			cfg.TrustedProxies = strings.Split(p, ",")
+		}
 	}
 	return cfg
 }

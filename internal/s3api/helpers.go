@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/edward-b-1/opens3/internal/checksum"
+	"github.com/edward-b-1/opens3/internal/iam"
 	"github.com/edward-b-1/opens3/internal/meta"
 	"github.com/edward-b-1/opens3/internal/object"
 	"github.com/edward-b-1/opens3/internal/s3err"
@@ -450,4 +451,46 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// authorizeAttributes enforces the permissions AWS requires for the
+// attributes an upload can set in one request besides the bytes: an ACL
+// needs s3:PutObjectAcl, tags s3:PutObjectTagging, a retention
+// s3:PutObjectRetention and a legal hold s3:PutObjectLegalHold. get looks
+// up a header (or, for browser form uploads, the equivalent form field).
+func (s *Server) authorizeAttributes(c *reqCtx, get func(string) string) error {
+	if c.identity != nil && c.identity.IsRoot {
+		return nil
+	}
+	hasGrant := false
+	for _, h := range []string{"x-amz-grant-read", "x-amz-grant-write", "x-amz-grant-read-acp", "x-amz-grant-write-acp", "x-amz-grant-full-control"} {
+		if get(h) != "" {
+			hasGrant = true
+		}
+	}
+	checks := []struct {
+		present bool
+		action  string
+	}{
+		{get("x-amz-acl") != "" || hasGrant, "s3:PutObjectAcl"},
+		{get("x-amz-tagging") != "", "s3:PutObjectTagging"},
+		{get("x-amz-object-lock-mode") != "" || get("x-amz-object-lock-retain-until-date") != "", "s3:PutObjectRetention"},
+		{get("x-amz-object-lock-legal-hold") != "", "s3:PutObjectLegalHold"},
+	}
+	for _, ck := range checks {
+		if !ck.present {
+			continue
+		}
+		switch g := s.iam.Decide(s.authzRequest(c, ck.action)); {
+		case g.Allowed():
+		case g == iam.NoGrant && c.grant == iam.ByACL:
+			// The upload itself was granted by an ACL (bucket WRITE, or
+			// ownership). Under the ACL model that grant covers what the
+			// uploader sets on its own new object; only policies name the
+			// per-attribute actions, and none denied this one.
+		default:
+			return s3err.New(s3err.AccessDenied).WithMessage("Access Denied: the request sets an attribute that requires %s", ck.action)
+		}
+	}
+	return nil
 }

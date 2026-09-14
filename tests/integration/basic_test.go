@@ -641,20 +641,21 @@ func TestSSEAndChecksums(t *testing.T) {
 	if b, g := e.get("sse", "kms"); b != "kms" || g.ServerSideEncryption != types.ServerSideEncryptionAwsKms {
 		t.Fatal("kms read")
 	}
-	// SSE-C.
+	// SSE-C (only accepted over a secure connection: here via the trusted "proxy").
+	sec := e.viaProxy(rootUser, rootPass, "")
 	key := make([]byte, 32)
 	rand.Read(key)
 	keyB64 := b64(key)
 	keyMD5 := b64md5(key)
-	_, err = e.s3.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("sse"), Key: aws.String("c"), Body: strings.NewReader("customer"),
+	_, err = sec.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("sse"), Key: aws.String("c"), Body: strings.NewReader("customer"),
 		SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(keyB64), SSECustomerKeyMD5: aws.String(keyMD5)})
 	if err != nil {
 		t.Fatalf("sse-c put: %v", err)
 	}
-	if _, err := e.s3.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("sse"), Key: aws.String("c")}); httpStatus(err) != 400 {
+	if _, err := sec.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("sse"), Key: aws.String("c")}); httpStatus(err) != 400 {
 		t.Fatalf("sse-c get without key: %v", err)
 	}
-	g, err := e.s3.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("sse"), Key: aws.String("c"), SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(keyB64), SSECustomerKeyMD5: aws.String(keyMD5)})
+	g, err := sec.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("sse"), Key: aws.String("c"), SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(keyB64), SSECustomerKeyMD5: aws.String(keyMD5)})
 	if err != nil {
 		t.Fatalf("sse-c get: %v", err)
 	}

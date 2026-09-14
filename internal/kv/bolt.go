@@ -19,7 +19,7 @@ type Bolt struct {
 
 // OpenBolt opens (creating if needed) the database file at path.
 func OpenBolt(path string) (*Bolt, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 	db, err := bolt.Open(path, 0o600, &bolt.Options{

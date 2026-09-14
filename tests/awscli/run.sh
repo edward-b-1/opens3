@@ -73,9 +73,13 @@ done
 SERVER_LOG="$RESULTS/server.log"
 "$BIN" server --root "$DATA/data" --address "127.0.0.1:$PORT" --no-fsync --log-level "${AWSCLI_LOG_LEVEL:-warn}" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
+TLS_PID=""
+TLS_DATA=""
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
+  if [ -n "$TLS_PID" ]; then kill "$TLS_PID" 2>/dev/null || true; wait "$TLS_PID" 2>/dev/null || true; fi
+  [ -n "$TLS_DATA" ] && rm -rf "$TLS_DATA"
   if [ "${AWSCLI_KEEP:-0}" = 1 ]; then log "data dir kept at $DATA"; else rm -rf "$DATA"; fi
 }
 trap cleanup EXIT

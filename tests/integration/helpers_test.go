@@ -42,8 +42,11 @@ func newEnv(t *testing.T) *env {
 	if os.Getenv("OPENS3_TEST_DEBUG") != "" {
 		lvl = slog.LevelDebug
 	}
+	// Loopback is a trusted proxy so that tests can present a request as
+	// arriving over TLS (viaProxy) without a TLS listener.
 	srv, err := server.New(server.Config{Root: root, RootUser: rootUser, RootPassword: rootPass, Region: "us-east-1", NoFsync: true,
-		Log: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))})
+		TrustedProxies: []string{"127.0.0.1", "::1"},
+		Log:            slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +65,30 @@ func (e *env) client(ak, sk, token string) *s3.Client {
 		Credentials:  credentials.NewStaticCredentialsProvider(ak, sk, token),
 		HTTPClient:   &http.Client{Transport: dumpTransport{http.DefaultTransport}},
 	})
+}
+
+// viaProxy is a client whose requests carry X-Forwarded-Proto: https, as
+// a TLS-terminating reverse proxy would add; the test server trusts
+// loopback, so the server treats them as secure.
+func (e *env) viaProxy(ak, sk, token string) *s3.Client {
+	return s3.New(s3.Options{
+		Region: "us-east-1", BaseEndpoint: aws.String(e.ts.URL), UsePathStyle: true,
+		Credentials: credentials.NewStaticCredentialsProvider(ak, sk, token),
+		HTTPClient:  &http.Client{Transport: headerTransport{next: http.DefaultTransport, set: map[string]string{"X-Forwarded-Proto": "https"}}},
+	})
+}
+
+// headerTransport adds fixed headers after signing (as a proxy would).
+type headerTransport struct {
+	next http.RoundTripper
+	set  map[string]string
+}
+
+func (h headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	for k, v := range h.set {
+		r.Header.Set(k, v)
+	}
+	return h.next.RoundTrip(r)
 }
 
 func (e *env) anon() *s3.Client {

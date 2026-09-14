@@ -1,7 +1,10 @@
 package integration
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	"github.com/edward-b-1/opens3/internal/server"
 )
 
 // TestUnsignedAmzHeadersRejected: a holder of a presigned PUT URL cannot
@@ -256,5 +261,135 @@ func TestAuthorizationContexts(t *testing.T) {
 	}
 	if b, _ := e.get("batchdel", "c"); b != "c" {
 		t.Fatal("object deleted without rights")
+	}
+}
+
+// TestForwardedProtoTrust: X-Forwarded-Proto is believed only from a
+// trusted proxy; SSE-C needs a secure connection; aws:SecureTransport
+// follows the same judgement.
+func TestForwardedProtoTrust(t *testing.T) {
+	e := newEnv(t) // trusts loopback
+	e.mkBucket("fwd")
+	key := make([]byte, 32)
+	ssec := func(c *s3.Client, k string) error {
+		_, err := c.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("fwd"), Key: aws.String(k), Body: strings.NewReader("x"),
+			SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(b64(key)), SSECustomerKeyMD5: aws.String(b64md5(key))})
+		return err
+	}
+	if err := ssec(e.s3, "plain"); errCode(err) != "InvalidRequest" {
+		t.Fatalf("SSE-C over plain HTTP: %v", err)
+	}
+	if err := ssec(e.viaProxy(rootUser, rootPass, ""), "proxied"); err != nil {
+		t.Fatalf("SSE-C via trusted proxy: %v", err)
+	}
+	// Reading an SSE-C object needs the secure connection too.
+	if _, err := e.s3.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("fwd"), Key: aws.String("proxied"),
+		SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(b64(key)), SSECustomerKeyMD5: aws.String(b64md5(key))}); errCode(err) != "InvalidRequest" {
+		t.Fatalf("SSE-C read over plain HTTP: %v", err)
+	}
+	// A policy requiring secure transport: denied over plain HTTP, allowed
+	// when a trusted proxy says the client used TLS.
+	e.put("fwd", "doc", "d")
+	gina := e.managedUser("gina", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::fwd/*","Condition":{"Bool":{"aws:SecureTransport":"true"}}}]}`)
+	if _, err := gina.GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("fwd"), Key: aws.String("doc")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("SecureTransport over plain HTTP: %v", err)
+	}
+	ginaCreds := gina.Options().Credentials
+	cr, _ := ginaCreds.Retrieve(e.ctx)
+	if _, err := e.viaProxy(cr.AccessKeyID, cr.SecretAccessKey, "").GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("fwd"), Key: aws.String("doc")}); err != nil {
+		t.Fatalf("SecureTransport via trusted proxy: %v", err)
+	}
+
+	// With no trusted proxies the same header means nothing.
+	root := t.TempDir()
+	srv, err := server.New(server.Config{Root: root, RootUser: rootUser, RootPassword: rootPass, Region: "us-east-1", NoFsync: true,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer func() { ts.Close(); srv.Close() }()
+	u := s3.New(s3.Options{Region: "us-east-1", BaseEndpoint: aws.String(ts.URL), UsePathStyle: true, Credentials: staticCreds(rootUser, rootPass, ""),
+		HTTPClient: &http.Client{Transport: headerTransport{next: http.DefaultTransport, set: map[string]string{"X-Forwarded-Proto": "https"}}}})
+	if _, err := u.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("fwd")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("fwd"), Key: aws.String("k"), Body: strings.NewReader("x"),
+		SSECustomerAlgorithm: aws.String("AES256"), SSECustomerKey: aws.String(b64(key)), SSECustomerKeyMD5: aws.String(b64md5(key))}); errCode(err) != "InvalidRequest" {
+		t.Fatalf("forwarded header believed without trusted proxies: %v", err)
+	}
+	// A bad trusted-proxies entry is refused at start.
+	if _, err := server.New(server.Config{Root: t.TempDir(), RootUser: rootUser, RootPassword: rootPass, TrustedProxies: []string{"nonsense"}, NoFsync: true,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}); err == nil {
+		t.Fatal("bad trusted proxy accepted")
+	}
+}
+
+// TestUploadAttributePermissions: setting an ACL, tags, retention or a
+// legal hold on an upload needs the permission for that attribute, not
+// just s3:PutObject.
+func TestUploadAttributePermissions(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.s3.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("attrs"), ObjectLockEnabledForBucket: aws.Bool(true),
+		ObjectOwnership: types.ObjectOwnershipObjectWriter}); err != nil {
+		t.Fatal(err)
+	}
+	writer := e.managedUser("writer", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject","s3:GetObject"],"Resource":"arn:aws:s3:::attrs/*"}]}`)
+	put := func(in *s3.PutObjectInput) string {
+		in.Bucket, in.Body = aws.String("attrs"), strings.NewReader("x")
+		_, err := writer.PutObject(e.ctx, in)
+		return errCode(err)
+	}
+	if code := put(&s3.PutObjectInput{Key: aws.String("plain")}); code != "" {
+		t.Fatalf("plain upload: %s", code)
+	}
+	if code := put(&s3.PutObjectInput{Key: aws.String("acl"), ACL: types.ObjectCannedACLPublicRead}); code != "AccessDenied" {
+		t.Fatalf("upload with ACL: %q", code)
+	}
+	if code := put(&s3.PutObjectInput{Key: aws.String("grant"), GrantRead: aws.String("uri=http://acs.amazonaws.com/groups/global/AllUsers")}); code != "AccessDenied" {
+		t.Fatalf("upload with grant: %q", code)
+	}
+	if code := put(&s3.PutObjectInput{Key: aws.String("tags"), Tagging: aws.String("a=b")}); code != "AccessDenied" {
+		t.Fatalf("upload with tags: %q", code)
+	}
+	until := time.Now().Add(time.Hour)
+	if code := put(&s3.PutObjectInput{Key: aws.String("ret"), ObjectLockMode: types.ObjectLockModeGovernance, ObjectLockRetainUntilDate: &until}); code != "AccessDenied" {
+		t.Fatalf("upload with retention: %q", code)
+	}
+	if code := put(&s3.PutObjectInput{Key: aws.String("hold"), ObjectLockLegalHoldStatus: types.ObjectLockLegalHoldStatusOn}); code != "AccessDenied" {
+		t.Fatalf("upload with legal hold: %q", code)
+	}
+	if _, err := writer.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("attrs"), Key: aws.String("copy"), CopySource: aws.String("/attrs/plain"), ACL: types.ObjectCannedACLPublicRead}); errCode(err) != "AccessDenied" {
+		t.Fatalf("copy with ACL: %v", err)
+	}
+	if _, err := writer.CreateMultipartUpload(e.ctx, &s3.CreateMultipartUploadInput{Bucket: aws.String("attrs"), Key: aws.String("mp"), Tagging: aws.String("a=b")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("multipart with tags: %v", err)
+	}
+	// Nothing was created by the refused requests.
+	for _, k := range []string{"acl", "grant", "tags", "ret", "hold", "copy"} {
+		if _, err := e.s3.HeadObject(e.ctx, &s3.HeadObjectInput{Bucket: aws.String("attrs"), Key: aws.String(k)}); err == nil {
+			t.Fatalf("refused upload %s exists", k)
+		}
+	}
+	// With the permissions, the same uploads succeed.
+	full := e.managedUser("fuller", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject","s3:PutObjectAcl","s3:PutObjectTagging","s3:PutObjectRetention","s3:PutObjectLegalHold"],"Resource":"arn:aws:s3:::attrs/*"}]}`)
+	if _, err := full.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("attrs"), Key: aws.String("ok"), Body: strings.NewReader("x"), ACL: types.ObjectCannedACLPublicRead, Tagging: aws.String("a=b"),
+		ObjectLockLegalHoldStatus: types.ObjectLockLegalHoldStatusOn}); err != nil {
+		t.Fatalf("upload with permissions: %v", err)
+	}
+	full.PutObjectLegalHold(e.ctx, &s3.PutObjectLegalHoldInput{Bucket: aws.String("attrs"), Key: aws.String("ok"), LegalHold: &types.ObjectLockLegalHold{Status: types.ObjectLockLegalHoldStatusOff}})
+
+	// Under the ACL model the grant that allows the upload covers what the
+	// uploader sets on its new object: a bucket owner with no policy
+	// beyond creating buckets can upload with an ACL and tags.
+	owner := e.managedUser("owner2", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:CreateBucket","s3:ListAllMyBuckets"],"Resource":"*"}]}`)
+	if _, err := owner.CreateBucket(e.ctx, &s3.CreateBucketInput{Bucket: aws.String("mine"), ObjectOwnership: types.ObjectOwnershipObjectWriter}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("mine"), Key: aws.String("k"), Body: strings.NewReader("x"), ACL: types.ObjectCannedACLPublicRead, Tagging: aws.String("a=b")}); err != nil {
+		t.Fatalf("bucket owner upload with ACL and tags: %v", err)
+	}
+	if _, err := e.anon().GetObject(e.ctx, &s3.GetObjectInput{Bucket: aws.String("mine"), Key: aws.String("k")}); err != nil {
+		t.Fatalf("public-read ACL not applied: %v", err)
 	}
 }

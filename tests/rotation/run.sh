@@ -10,6 +10,9 @@
 # bucket default-encryption rule, an SSE-S3 multipart upload left in
 # progress, and an IAM user's access key. The lifecycle:
 #
+# The server runs with --tls self-signed (SSE-C needs a secure connection)
+# and the python container trusts the generated certificate.
+#
 #   1. file mode: first start generates k1; create data; verify
 #   2. rotate (k2 added, everything re-wrapped); verify
 #   3. retire (k1 removed); verify; the saved k1 ring no longer opens the data
@@ -99,9 +102,9 @@ server_running() { docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null | 
 server_start() {
   docker run -d --name "$NAME" --network host --user "$UID_GID" -v "$DATA/data:/data" \
     -e OPENS3_ROOT_USER="$ROOT_USER" -e OPENS3_ROOT_PASSWORD="$ROOT_PASSWORD" "$@" \
-    "$IMAGE" server --root /data --address "127.0.0.1:$PORT" --no-fsync --log-level "${ROTATION_LOG_LEVEL:-warn}" >/dev/null
+    "$IMAGE" server --root /data --address "127.0.0.1:$PORT" --tls self-signed --no-fsync --log-level "${ROTATION_LOG_LEVEL:-warn}" >/dev/null
   for _ in $(seq 1 100); do
-    if curl -fs "http://127.0.0.1:$PORT/opens3/health/ready" >/dev/null 2>&1; then return 0; fi
+    if [ -s "$DATA/data/tls/tls.crt" ] && curl -fs --cacert "$DATA/data/tls/tls.crt" "https://127.0.0.1:$PORT/opens3/health/ready" >/dev/null 2>&1; then return 0; fi
     server_running || { echo "server exited early:"; docker logs "$NAME" 2>&1; server_stop; return 1; }
     sleep 0.1
   done
@@ -122,7 +125,7 @@ server_must_fail() {
   local want="$1"; shift
   expect_fail "$want" docker run --rm --user "$UID_GID" -v "$DATA/data:/data" \
     -e OPENS3_ROOT_USER="$ROOT_USER" -e OPENS3_ROOT_PASSWORD="$ROOT_PASSWORD" "$@" \
-    "$IMAGE" server --root /data --address "127.0.0.1:$PORT" --no-fsync
+    "$IMAGE" server --root /data --address "127.0.0.1:$PORT" --tls self-signed --no-fsync
 }
 
 # master [docker -e args...] -- CMD: runs `opens3 master CMD --root /data`.
@@ -148,9 +151,9 @@ PY="$RESULTS/py"
 mkdir -p "$PY/site" "$PY/generated"
 cp "$REPO/examples/python/s3conf.py" "$REPO/examples/python/encrypted_data.py" "$PY/"
 py() {
-  docker run --rm --network host --user "$UID_GID" -v "$PY:/py" -w /py \
+  docker run --rm --network host --user "$UID_GID" -v "$PY:/py" -v "$DATA/data/tls:/tls:ro" -w /py \
     -e HOME=/py -e PYTHONPATH=/py/site -e PYTHONDONTWRITEBYTECODE=1 \
-    -e OPENS3_ENDPOINT="http://127.0.0.1:$PORT" -e OPENS3_ACCESS_KEY="$ROOT_USER" -e OPENS3_SECRET_KEY="$ROOT_PASSWORD" \
+    -e OPENS3_ENDPOINT="https://127.0.0.1:$PORT" -e OPENS3_TLS_VERIFY=/tls/tls.crt -e OPENS3_ACCESS_KEY="$ROOT_USER" -e OPENS3_SECRET_KEY="$ROOT_PASSWORD" \
     -e OPENS3_REGION=us-east-1 -e OPENS3_BUCKET_PREFIX=rotation \
     "$PY_IMAGE" python encrypted_data.py "$@"
 }

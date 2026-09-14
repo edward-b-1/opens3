@@ -27,15 +27,15 @@ func (s *Server) putObject(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
+	if err := s.authorizeAttributes(c, c.r.Header.Get); err != nil {
+		return err
+	}
 	if attrs.ACL != nil && c.bkt.PublicAccessBlock != nil && c.bkt.PublicAccessBlock.BlockPublicAcls && isPublicACL(attrs.ACL) {
 		return s3err.New(s3err.AccessDenied).WithMessage("Public ACLs are blocked by the BlockPublicAcls setting")
 	}
 	sseReq, err := parseSSEHeaders(r, false)
 	if err != nil {
 		return err
-	}
-	if sseReq.Type == "SSE-C" && r.TLS == nil && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") && s.cfg.RequireTLSForSSEC {
-		return s3err.New(s3err.InvalidRequest).WithMessage("Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.")
 	}
 	cr, err := parseChecksumHeaders(c)
 	if err != nil {
@@ -329,6 +329,9 @@ func (s *Server) copyObject(c *reqCtx) error {
 	}
 	attrs, err := s.parseObjectAttrs(c, true)
 	if err != nil {
+		return err
+	}
+	if err := s.authorizeAttributes(c, c.r.Header.Get); err != nil {
 		return err
 	}
 	dir := strings.ToUpper(r.Header.Get("x-amz-metadata-directive"))

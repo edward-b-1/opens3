@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -238,7 +237,8 @@ func (s *Server) authorize(c *reqCtx) error {
 		}
 		return nil
 	}
-	if !s.iam.Authorize(req) {
+	c.grant = s.iam.Decide(req)
+	if !c.grant.Allowed() {
 		// A caller allowed to list the bucket learns that the key does not
 		// exist (404) instead of 403, as on AWS; the key is evaluated as
 		// the s3:prefix condition of the ListBucket permission.
@@ -264,12 +264,12 @@ func (s *Server) conditionContext(c *reqCtx) map[string][]string {
 	r := c.r
 	q := r.URL.Query()
 	m := map[string][]string{}
-	ip := clientIP(r)
+	ip := s.cfg.TrustedProxies.ClientIP(r)
 	if ip != "" {
 		m["aws:sourceip"] = []string{ip}
 	}
 	secure := "false"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+	if s.cfg.TrustedProxies.Secure(r) {
 		secure = "true"
 	}
 	m["aws:securetransport"] = []string{secure}
@@ -350,13 +350,15 @@ func tlsVersion(v uint16) string {
 	return ""
 }
 
-func clientIP(r *http.Request) string {
-	// Trust X-Forwarded-For only if configured (not yet); use RemoteAddr.
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+// hasSSECHeaders reports whether the request carries a customer-provided
+// encryption key (for the object or a copy source).
+func hasSSECHeaders(r *http.Request) bool {
+	return r.Header.Get("x-amz-server-side-encryption-customer-key") != "" ||
+		r.Header.Get("x-amz-copy-source-server-side-encryption-customer-key") != ""
+}
+
+func errSSECPlaintext() error {
+	return s3err.New(s3err.InvalidRequest).WithMessage("Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.")
 }
 
 // authenticateV2 verifies AWS Signature Version 2 (legacy clients).

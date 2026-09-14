@@ -17,6 +17,10 @@ type DeleteInput struct {
 	VersionID        string
 	BypassGovernance bool
 	IfMatch          string // conditional delete (ETag or *)
+	// IfSeq, when non-zero, deletes only if the current version is the one
+	// with this sequence (a same-content replacement has the same ETag but
+	// a new sequence).
+	IfSeq uint64
 	// IfMatchSize / IfMatchLastModified are accepted for DeleteObjects
 	// per-object conditions.
 }
@@ -86,6 +90,9 @@ func (s *Service) DeleteObject(ctx context.Context, actor Actor, in DeleteInput)
 			if !etagMatches(in.IfMatch, cur.ETag) {
 				return s3err.New(s3err.PreconditionFailed)
 			}
+		}
+		if in.IfSeq != 0 && (!exists || cur.Seq != in.IfSeq) {
+			return s3err.New(s3err.PreconditionFailed)
 		}
 		switch b.Versioning {
 		case "Enabled":

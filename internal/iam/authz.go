@@ -35,7 +35,30 @@ type Request struct {
 // identity-policy allow (same account); then ACL grants; else deny. Root
 // is allowed everything unless a bucket policy explicitly denies it, and
 // can always modify the bucket policy so it can never lock itself out.
-func (s *Store) Authorize(r Request) bool {
+// Grant is the outcome of an authorisation decision.
+type Grant int
+
+const (
+	// Refused: an explicit deny, or a session policy that does not allow.
+	Refused Grant = iota
+	// NoGrant: nothing denied it, but nothing allowed it either.
+	NoGrant
+	// ByPolicy: allowed by a bucket or identity policy (or root).
+	ByPolicy
+	// ByACL: allowed only by a bucket or object ACL grant (or ownership).
+	ByACL
+)
+
+// Allowed reports whether the grant permits the request.
+func (g Grant) Allowed() bool { return g == ByPolicy || g == ByACL }
+
+// Authorize decides a request: deny wins, then bucket policy, identity
+// and session policies, then ACLs.
+func (s *Store) Authorize(r Request) bool { return s.Decide(r).Allowed() }
+
+// Decide is Authorize with the source of the grant, for callers that
+// must treat a policy grant and an ACL grant differently.
+func (s *Store) Decide(r Request) Grant {
 	id := r.Identity
 	vars := map[string]string{}
 	args := policy.Args{Action: r.Action, Resource: policy.ResourceARN(r.Bucket, r.Key), Conditions: r.Conditions, Vars: vars}
@@ -75,12 +98,12 @@ func (s *Store) Authorize(r Request) bool {
 	if bp == policy.Denied {
 		// Root escape hatch for bucket policy management.
 		if id != nil && id.IsRoot && !r.SelfLockConfirmed && (r.Action == "s3:PutBucketPolicy" || r.Action == "s3:DeleteBucketPolicy" || r.Action == "s3:GetBucketPolicy") {
-			return true
+			return ByPolicy
 		}
-		return false
+		return Refused
 	}
 	if id != nil && id.IsRoot {
-		return true
+		return ByPolicy
 	}
 
 	// Identity policies and session policy.
@@ -93,7 +116,7 @@ func (s *Store) Authorize(r Request) bool {
 			}
 			switch doc.Evaluate(args) {
 			case policy.Denied:
-				return false
+				return Refused
 			case policy.Allowed:
 				ip = policy.Allowed
 			}
@@ -106,21 +129,27 @@ func (s *Store) Authorize(r Request) bool {
 			}
 			doc, err := s.ParsedPolicy(raw)
 			if err != nil {
-				return false
+				return Refused
 			}
 			if doc.Evaluate(args) != policy.Allowed {
-				return false
+				return Refused
 			}
 		}
 		// Administrative actions are only granted by identity policies.
 		if IsAdministrative(r.Action) {
-			return ip == policy.Allowed
+			if ip == policy.Allowed {
+				return ByPolicy
+			}
+			return NoGrant
 		}
 	}
 	if bp == policy.Allowed || ip == policy.Allowed {
-		return true
+		return ByPolicy
 	}
-	return aclAllows(r)
+	if aclAllows(r) {
+		return ByACL
+	}
+	return NoGrant
 }
 
 // aclAllows evaluates bucket and object ACL grants.

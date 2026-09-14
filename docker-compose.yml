@@ -9,6 +9,7 @@ services:
       OPENS3_ROOT_PASSWORD: ${OPENS3_ROOT_PASSWORD:?set OPENS3_ROOT_PASSWORD}
       OPENS3_MASTER_KEY: ${OPENS3_MASTER_KEY:-}
       OPENS3_TLS: ${OPENS3_TLS:-}
+      OPENS3_TRUSTED_PROXIES: ${OPENS3_TRUSTED_PROXIES:-}
     volumes:
       - opens3-data:/data
     restart: unless-stopped
