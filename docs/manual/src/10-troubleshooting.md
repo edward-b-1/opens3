@@ -11,10 +11,12 @@ which is normal for a self-signed one. Trust it on the client (chapter 2)
 or click through the browser warning. The log line comes from the client
 telling the server it refused the certificate.
 
-**`client sent an HTTP request to an HTTPS server` in the log.** Something
-used `http://` against a TLS port. Since TLS item 4 the server redirects
-such requests; the message means the client did not follow. Fix the
-client's endpoint URL.
+**`This server requires HTTPS. Use https://...`, or the AWS CLI reports
+"maximum recursion depth exceeded".** The client's endpoint URL says
+`http://` but the server has TLS on. Change the endpoint to `https://`
+(and trust the certificate, above). The recursion error is what botocore
+produces when an S3 request meets a redirect; current versions of OpenS3
+answer S3 clients with the `InvalidRequest` message instead.
 
 **"the console signs in with a user name and console password; access keys
 work only with the S3 API".** The sign-in form was sent an access key pair.

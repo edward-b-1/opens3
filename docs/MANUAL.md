@@ -171,9 +171,11 @@ export OPENS3_TLS_CERT=/etc/opens3/tls.crt OPENS3_TLS_KEY=/etc/opens3/tls.key
 With TLS on:
 
 - the listener requires TLS 1.2 or later and prefers TLS 1.3;
-- a plain-HTTP request to the same port is redirected to `https://` (301 for
-  GET and HEAD, 308 otherwise), so a stray `http://` URL gets a clear answer
-  rather than a handshake error;
+- a plain-HTTP request to the same port gets a clear answer instead of a
+  handshake error: browsers (the console, or any request accepting HTML)
+  are redirected to `https://`; S3 clients receive a 400 `InvalidRequest`
+  error naming the `https://` URL, because SDKs do not follow redirects on
+  signed requests and some loop on them;
 - responses carry `Strict-Transport-Security` (two years) unless
   `OPENS3_NO_HSTS=1`. The header applies to the whole host name, so disable
   it if the same host also serves something over plain HTTP;
@@ -865,10 +867,12 @@ which is normal for a self-signed one. Trust it on the client (chapter 2)
 or click through the browser warning. The log line comes from the client
 telling the server it refused the certificate.
 
-**`client sent an HTTP request to an HTTPS server` in the log.** Something
-used `http://` against a TLS port. Since TLS item 4 the server redirects
-such requests; the message means the client did not follow. Fix the
-client's endpoint URL.
+**`This server requires HTTPS. Use https://...`, or the AWS CLI reports
+"maximum recursion depth exceeded".** The client's endpoint URL says
+`http://` but the server has TLS on. Change the endpoint to `https://`
+(and trust the certificate, above). The recursion error is what botocore
+produces when an S3 request meets a redirect; current versions of OpenS3
+answer S3 clients with the `InvalidRequest` message instead.
 
 **"the console signs in with a user name and console password; access keys
 work only with the S3 API".** The sign-in form was sent an access key pair.

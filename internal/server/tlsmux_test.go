@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,7 +57,7 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Plain HTTP on the same port is redirected, not rejected.
+	// Plain HTTP on the same port: browsers are redirected.
 	pc := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err = pc.Get("http://" + addr + "/console/?x=1")
 	if err != nil {
@@ -66,7 +67,8 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	if resp.StatusCode != 301 || resp.Header.Get("Location") != "https://"+addr+"/console/?x=1" {
 		t.Fatalf("redirect: %d %q", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	req, _ := http.NewRequest("PUT", "http://"+addr+"/bucket/key", nil)
+	req, _ := http.NewRequest("PUT", "http://"+addr+"/console/api/x", nil)
+	req.Header.Set("Accept", "text/html")
 	resp, err = pc.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +76,17 @@ func TestTLSListenerRedirectsPlainHTTP(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 308 {
 		t.Fatalf("PUT redirect: %d", resp.StatusCode)
+	}
+	// S3 clients get an S3 error naming the https URL, never a redirect.
+	req, _ = http.NewRequest("GET", "http://"+addr+"/bucket/?list-type=2", nil)
+	resp, err = pc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 400 || !strings.Contains(string(body), "<Code>InvalidRequest</Code>") || !strings.Contains(string(body), "https://"+addr+"/bucket/") {
+		t.Fatalf("s3 client: %d %s", resp.StatusCode, body)
 	}
 	// Garbage is dropped without a panic.
 	c, _ := net.Dial("tcp", addr)

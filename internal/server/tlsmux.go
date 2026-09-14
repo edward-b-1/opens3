@@ -83,14 +83,26 @@ func (m *muxListener) redirect(c net.Conn, br *bufio.Reader) {
 	if host == "" {
 		host = c.LocalAddr().String()
 	}
-	status := http.StatusPermanentRedirect // keeps the method and body for non-GET clients
-	if req.Method == http.MethodGet || req.Method == http.MethodHead {
-		status = http.StatusMovedPermanently
-	}
 	target := "https://" + host + req.URL.RequestURI()
-	m.log.Info("redirecting plain http to https", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
-	resp := &http.Response{StatusCode: status, ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{
-		"Location": {target}, "Content-Type": {"text/plain; charset=utf-8"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader("use https://\n")), ContentLength: 13}
+	// Browsers get a redirect. S3 clients do not follow redirects on signed
+	// requests (botocore treats a 301 as a bucket-region redirect and can
+	// loop), so they get a plain S3 error that names the https URL.
+	browser := strings.HasPrefix(req.URL.Path, "/console") || strings.Contains(req.Header.Get("Accept"), "text/html")
+	var resp *http.Response
+	if browser {
+		status := http.StatusPermanentRedirect // keeps the method and body for non-GET clients
+		if req.Method == http.MethodGet || req.Method == http.MethodHead {
+			status = http.StatusMovedPermanently
+		}
+		m.log.Info("redirecting plain http to https", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
+		resp = &http.Response{StatusCode: status, ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{
+			"Location": {target}, "Content-Type": {"text/plain; charset=utf-8"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader("use https://\n")), ContentLength: 13}
+	} else {
+		m.log.Info("plain http request to the TLS port refused", "from", c.RemoteAddr().String(), "method", req.Method, "target", target)
+		body := `<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidRequest</Code><Message>This server requires HTTPS. Use ` + target + `</Message><Resource>` + req.URL.Path + `</Resource></Error>`
+		resp = &http.Response{StatusCode: http.StatusBadRequest, ProtoMajor: 1, ProtoMinor: 1, Header: http.Header{
+			"Content-Type": {"application/xml"}, "Connection": {"close"}}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body))}
+	}
 	_ = resp.Write(c)
 }
 
