@@ -102,8 +102,31 @@ func TestIAMAPI(t *testing.T) {
 	if _, err := aic.ListUsers(e.ctx, &iam.ListUsersInput{}); errCode(err) != "AccessDenied" {
 		t.Fatalf("alice list users: %v", err)
 	}
+	// Listing one's own keys needs iam:ListAccessKeys like anything else
+	// (the session policy of a narrowed credential must apply); a
+	// self-only policy in the AWS style grants it.
+	if _, err := aic.ListAccessKeys(e.ctx, &iam.ListAccessKeysInput{}); errCode(err) != "AccessDenied" {
+		t.Fatalf("self list keys without permission: %v", err)
+	}
+	selfDoc := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:ListAccessKeys","Resource":"arn:aws:iam::*:user/${aws:username}"}]}`
+	sp, err := ic.CreatePolicy(e.ctx, &iam.CreatePolicyInput{PolicyName: aws.String("self-keys"), PolicyDocument: aws.String(selfDoc)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.AttachUserPolicy(e.ctx, &iam.AttachUserPolicyInput{UserName: aws.String("alice"), PolicyArn: sp.Policy.Arn}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := aic.ListAccessKeys(e.ctx, &iam.ListAccessKeysInput{}); err != nil {
-		t.Fatalf("self list keys: %v", err)
+		t.Fatalf("self list keys with a self-only policy: %v", err)
+	}
+	if _, err := aic.ListAccessKeys(e.ctx, &iam.ListAccessKeysInput{UserName: aws.String("root")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("self-only policy reached another user: %v", err)
+	}
+	if _, err := ic.DetachUserPolicy(e.ctx, &iam.DetachUserPolicyInput{UserName: aws.String("alice"), PolicyArn: sp.Policy.Arn}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.DeletePolicy(e.ctx, &iam.DeletePolicyInput{PolicyArn: sp.Policy.Arn}); err != nil {
+		t.Fatal(err)
 	}
 	if aci, err := e.sts(ak, sk, "").GetCallerIdentity(e.ctx, &sts.GetCallerIdentityInput{}); err != nil || *aci.Arn != "arn:aws:iam::000000000000:user/alice" {
 		t.Fatalf("alice caller identity: %v", err)

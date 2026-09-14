@@ -166,11 +166,11 @@ func (h *Handler) deletePolicy(req *Request) (any, error) {
 // --- attachments ---------------------------------------------------------------
 
 func (h *Handler) attachUserPolicy(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionAttachUserPolicy); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionAttachUserPolicy, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	p, err := h.lookupPolicy(req)
@@ -193,11 +193,11 @@ func (h *Handler) attachUserPolicy(req *Request) (any, error) {
 }
 
 func (h *Handler) detachUserPolicy(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionDetachUserPolicy); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionDetachUserPolicy, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	pname, err := h.policyNameFromARN(req.Form.Get("PolicyArn"))
@@ -256,11 +256,11 @@ func (h *Handler) attachedList(req *Request, names []string) (any, error) {
 }
 
 func (h *Handler) attachGroupPolicy(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionAttachGroupPolicy); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionAttachGroupPolicy, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	p, err := h.lookupPolicy(req)
@@ -283,11 +283,11 @@ func (h *Handler) attachGroupPolicy(req *Request) (any, error) {
 }
 
 func (h *Handler) detachGroupPolicy(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionDetachGroupPolicy); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionDetachGroupPolicy, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	pname, err := h.policyNameFromARN(req.Form.Get("PolicyArn"))
@@ -317,11 +317,11 @@ func (h *Handler) detachGroupPolicy(req *Request) (any, error) {
 }
 
 func (h *Handler) listAttachedGroupPolicies(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionListAttachedGroup); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionListAttachedGroup, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	g, err := h.IAM.GetGroup(name)

@@ -110,12 +110,20 @@ func (h *Handler) Serve(req *Request) {
 }
 
 // authorize checks iam:<Action> against the caller's identity policies.
-func (h *Handler) authorize(req *Request, action string) error {
-	if !h.IAM.Authorize(iam.Request{Identity: req.Identity, Action: action, Conditions: map[string][]string{}}) {
+func (h *Handler) authorize(req *Request, action string) error { return h.authorizeOn(req, action, "") }
+
+// authorizeOn evaluates action against a specific IAM resource ARN (a
+// user, group or policy), so policies can scope administrative actions,
+// for example to the caller's own user with
+// arn:aws:iam::*:user/${aws:username}. An empty resource is the account.
+func (h *Handler) authorizeOn(req *Request, action, resource string) error {
+	if !h.IAM.Authorize(iam.Request{Identity: req.Identity, Action: action, Resource: resource, Conditions: map[string][]string{}}) {
 		return errAccessDenied(action)
 	}
 	return nil
 }
+
+func (h *Handler) userResource(name string) string { return iam.UserARN(h.IAM.AccountID(), name) }
 
 func toError(err error) *Error {
 	if e, ok := err.(*Error); ok {

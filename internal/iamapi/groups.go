@@ -7,11 +7,11 @@ func (h *Handler) groupShape(g *iam.Group) xmlGroup {
 }
 
 func (h *Handler) createGroup(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionCreateGroup); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionCreateGroup, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	if err := h.IAM.CreateGroup(name, nil, nil); err != nil {
@@ -32,11 +32,11 @@ func (h *Handler) createGroup(req *Request) (any, error) {
 }
 
 func (h *Handler) getGroup(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionGetGroup); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionGetGroup, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	g, err := h.IAM.GetGroup(name)
@@ -115,11 +115,11 @@ func (h *Handler) listGroupsForUser(req *Request) (any, error) {
 }
 
 func (h *Handler) deleteGroup(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionDeleteGroup); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionDeleteGroup, iam.GroupARN(h.IAM.AccountID(), name)); err != nil {
 		return nil, err
 	}
 	g, err := h.IAM.GetGroup(name)
@@ -136,11 +136,11 @@ func (h *Handler) deleteGroup(req *Request) (any, error) {
 }
 
 func (h *Handler) addUserToGroup(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionAddUserToGroup); err != nil {
-		return nil, err
-	}
 	gname, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionAddUserToGroup, iam.GroupARN(h.IAM.AccountID(), gname)); err != nil {
 		return nil, err
 	}
 	uname, err := requireParam(req, "UserName")
@@ -166,11 +166,11 @@ func (h *Handler) addUserToGroup(req *Request) (any, error) {
 }
 
 func (h *Handler) removeUserFromGroup(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionRemoveUserFromGrp); err != nil {
-		return nil, err
-	}
 	gname, err := requireParam(req, "GroupName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionRemoveUserFromGrp, iam.GroupARN(h.IAM.AccountID(), gname)); err != nil {
 		return nil, err
 	}
 	uname, err := requireParam(req, "UserName")

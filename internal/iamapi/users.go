@@ -9,11 +9,11 @@ func (h *Handler) userShape(u *iam.User) xmlUser {
 }
 
 func (h *Handler) createUser(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionCreateUser); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionCreateUser, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	if err := h.IAM.CreateUser(name, "", nil); err != nil {
@@ -95,11 +95,11 @@ func (h *Handler) listUsers(req *Request) (any, error) {
 }
 
 func (h *Handler) updateUser(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionUpdateUser); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionUpdateUser, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	if req.Form.Get("NewUserName") != "" {
@@ -114,11 +114,11 @@ func (h *Handler) updateUser(req *Request) (any, error) {
 // deleteUser follows AWS: keys, login profile, group memberships and
 // attached policies must be removed first.
 func (h *Handler) deleteUser(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionDeleteUser); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionDeleteUser, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	u, err := h.IAM.GetUser(name)
@@ -210,11 +210,11 @@ func (h *Handler) updateLoginProfile(req *Request) (any, error) {
 }
 
 func (h *Handler) deleteLoginProfile(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionDeleteLoginProfile); err != nil {
-		return nil, err
-	}
 	name, err := requireParam(req, "UserName")
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionDeleteLoginProfile, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	u, err := h.IAM.GetUser(name)

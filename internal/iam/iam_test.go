@@ -305,3 +305,60 @@ func TestBucketWriteACLDoesNotGrantTagging(t *testing.T) {
 		t.Fatal("bucket WRITE must not grant the tagging operations")
 	}
 }
+
+// TestAdministrativeActionsHaveIAMResources: an S3 resource pattern must
+// never match administrative actions, and IAM actions can be scoped to
+// the caller's own user.
+func TestAdministrativeActionsHaveIAMResources(t *testing.T) {
+	db, err := kv.OpenBolt(filepath.Join(t.TempDir(), "meta.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	st, err := Open(db, Config{RootAccessKey: "root", RootSecretKey: "rootsecret", Wrapper: kms.TestMaster()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(name, doc string) *Identity {
+		if err := st.PutPolicy(name+"-policy", []byte(doc)); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.CreateUser(name, name+"secret000", []string{name + "-policy"}); err != nil {
+			t.Fatal(err)
+		}
+		id, err := st.Resolve(name, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	// "Everything on S3" is not "everything".
+	s3all := mk("s3all", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"arn:aws:s3:::*"}]}`)
+	if !st.Authorize(Request{Identity: s3all, Action: "s3:ListAllMyBuckets", Conditions: map[string][]string{}}) {
+		t.Fatal("s3 action on s3 resource must be allowed")
+	}
+	for _, a := range []string{ActionCreateAccessKey, "kms:CreateKey", "opens3:ServerInfo"} {
+		if st.Authorize(Request{Identity: s3all, Action: a, Conditions: map[string][]string{}}) {
+			t.Fatalf("%s granted by an S3 resource pattern", a)
+		}
+		if st.Authorize(Request{Identity: s3all, Action: a, Resource: UserARN(st.AccountID(), "s3all"), Conditions: map[string][]string{}}) {
+			t.Fatalf("%s on a user ARN granted by an S3 resource pattern", a)
+		}
+	}
+	// Self-only key management, AWS style.
+	self := mk("selfie", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:CreateAccessKey","iam:DeleteAccessKey"],"Resource":"arn:aws:iam::*:user/${aws:username}"}]}`)
+	if !st.Authorize(Request{Identity: self, Action: ActionCreateAccessKey, Resource: UserARN(st.AccountID(), "selfie"), Conditions: map[string][]string{}}) {
+		t.Fatal("own user ARN must match ${aws:username}")
+	}
+	if st.Authorize(Request{Identity: self, Action: ActionCreateAccessKey, Resource: UserARN(st.AccountID(), "s3all"), Conditions: map[string][]string{}}) {
+		t.Fatal("another user's ARN matched a self-only policy")
+	}
+	if st.Authorize(Request{Identity: self, Action: ActionCreateAccessKey, Conditions: map[string][]string{}}) {
+		t.Fatal("the account resource matched a self-only policy")
+	}
+	// Resource "*" still covers everything, as the built-in consoleAdmin relies on.
+	star := mk("star", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:*","Resource":"*"}]}`)
+	if !st.Authorize(Request{Identity: star, Action: ActionCreateAccessKey, Resource: UserARN(st.AccountID(), "s3all"), Conditions: map[string][]string{}}) {
+		t.Fatal("Resource * must match a user ARN")
+	}
+}

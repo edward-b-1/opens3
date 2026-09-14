@@ -163,3 +163,27 @@ func (id *Identity) PrincipalType() string {
 		return "User"
 	}
 }
+
+// ARNs of IAM resources, for policies that scope administrative actions
+// (for example Resource: "arn:aws:iam::*:user/${aws:username}").
+
+// AccountARN is the account itself, the resource of administrative actions
+// that have no more specific target.
+func AccountARN(account string) string { return "arn:aws:iam::" + account + ":root" }
+
+// UserARN is a user's ARN.
+func UserARN(account, name string) string { return "arn:aws:iam::" + account + ":user/" + name }
+
+// GroupARN is a group's ARN.
+func GroupARN(account, name string) string { return "arn:aws:iam::" + account + ":group/" + name }
+
+// PolicyARN is a policy's ARN; built-in policies are AWS-managed style.
+func PolicyARN(account, name string, builtIn bool) string {
+	if builtIn {
+		return "arn:aws:iam::aws:policy/" + name
+	}
+	return "arn:aws:iam::" + account + ":policy/" + name
+}
+
+// KMSKeyARN is a named encryption key's ARN.
+func KMSKeyARN(account, id string) string { return "arn:aws:kms::" + account + ":key/" + id }

@@ -15,10 +15,10 @@ func keyStatus(k *iam.Key) string {
 
 func (h *Handler) createAccessKey(req *Request) (any, error) {
 	name, _ := h.callerOrParam(req)
-	// Creating a key needs the permission even for oneself, and credentials
-	// under a session policy may not create keys at all: the new key would
-	// carry none of the restriction.
-	if err := h.authorize(req, iam.ActionCreateAccessKey); err != nil {
+	// Creating a key needs the permission (on the target user) even for
+	// oneself, and credentials under a session policy may not create keys
+	// at all: the new key would carry none of the restriction.
+	if err := h.authorizeOn(req, iam.ActionCreateAccessKey, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
@@ -41,10 +41,9 @@ func (h *Handler) createAccessKey(req *Request) (any, error) {
 
 func (h *Handler) listAccessKeys(req *Request) (any, error) {
 	name, self := h.callerOrParam(req)
-	if !self {
-		if err := h.authorize(req, iam.ActionListAccessKeys); err != nil {
-			return nil, err
-		}
+	// Even for one's own keys, so that a session policy applies.
+	if err := h.authorizeOn(req, iam.ActionListAccessKeys, h.userResource(name)); err != nil {
+		return nil, err
 	}
 	if req.Identity.IsRoot && self {
 		name = "root"
@@ -90,10 +89,10 @@ func (h *Handler) ownedKey(req *Request, action string) (*iam.Key, error) {
 	if n := req.Form.Get("UserName"); n != "" && n != k.User {
 		return nil, errNoSuchEntity("The Access Key with id " + id + " cannot be found.")
 	}
-	if k.User != req.Identity.Name() || req.Identity.IsRoot {
-		if err := h.authorize(req, action); err != nil {
-			return nil, err
-		}
+	// Always authorised, own keys included: the caller's session policy
+	// (a filter inside Authorize) must allow the action.
+	if err := h.authorizeOn(req, action, h.userResource(k.User)); err != nil {
+		return nil, err
 	}
 	return k, nil
 }

@@ -13,6 +13,21 @@ tagged tree.
 
 ## [Unreleased]
 
+### Security
+
+- Administrative actions (`iam:`, `kms:`, `sts:`, `opens3:`) are
+  evaluated against IAM resource ARNs, never the S3 ARN: a statement
+  granting `Action: *` on `arn:aws:s3:::*` no longer covers them, and IAM
+  API actions that target a user, group or policy are evaluated against
+  that resource, so AWS-style self-only policies
+  (`Resource: arn:aws:iam::*:user/${aws:username}`) work.
+- Listing, deactivating and deleting one's own access keys through the
+  IAM API go through authorisation like every other action, so a
+  session policy applies; before, own keys bypassed it.
+- `s3:ExistingObjectTag` conditions apply to DeleteObject and
+  DeleteObjects; the existing object was not loaded for deletes before, so
+  a deny keyed on a tag did not fire.
+
 ### Changed
 
 - **Licence: AGPL-3.0-or-later**, from Apache License 2.0. Releases

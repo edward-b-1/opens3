@@ -16,6 +16,14 @@ CLI, the AWS SDKs and policies written for AWS work unchanged.
 | **Policy** | An AWS policy document (JSON). Built-in ones are `readonly`, `readwrite`, `writeonly`, `diagnostics` and `consoleAdmin`. |
 | **Temporary credentials** | Issued by STS `AssumeRole`: a key pair plus a session token, expiring after 15 minutes to 7 days, optionally narrowed by a session policy. Console sessions are these. |
 
+Administrative actions are evaluated against IAM resource ARNs: a user
+is `arn:aws:iam::000000000000:user/NAME`, a group
+`...:group/NAME`, a policy `...:policy/NAME`, and actions with no
+particular target the account, `...:root`. `Resource: "*"` covers them
+all; an S3 resource pattern never does. A policy that lets users manage
+their own keys is therefore written as on AWS:
+`{"Action":["iam:ListAccessKeys","iam:CreateAccessKey","iam:DeleteAccessKey"],"Resource":"arn:aws:iam::*:user/${aws:username}"}`.
+
 Credentials narrowed by a session policy cannot create access keys or set
 console passwords, for their own user or anyone else, because the result
 would carry none of the restriction. A session derived from such

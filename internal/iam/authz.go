@@ -13,6 +13,11 @@ type Request struct {
 	Action   string    // s3:GetObject etc.
 	Bucket   string
 	Key      string
+	// Resource is the ARN the action is evaluated against. Empty means the
+	// S3 ARN of Bucket/Key for S3 actions and the account ARN for
+	// administrative (iam:, kms:, sts:, opens3:) actions, so that an S3
+	// resource pattern such as arn:aws:s3:::* never matches them.
+	Resource string
 	// Bucket state needed for the decision.
 	BucketOwner       string // canonical ID
 	BucketPolicy      json.RawMessage
@@ -61,7 +66,15 @@ func (s *Store) Authorize(r Request) bool { return s.Decide(r).Allowed() }
 func (s *Store) Decide(r Request) Grant {
 	id := r.Identity
 	vars := map[string]string{}
-	args := policy.Args{Action: r.Action, Resource: policy.ResourceARN(r.Bucket, r.Key), Conditions: r.Conditions, Vars: vars}
+	resource := r.Resource
+	if resource == "" {
+		if IsAdministrative(r.Action) {
+			resource = AccountARN(s.cfg.AccountID)
+		} else {
+			resource = policy.ResourceARN(r.Bucket, r.Key)
+		}
+	}
+	args := policy.Args{Action: r.Action, Resource: resource, Conditions: r.Conditions, Vars: vars}
 	if id == nil {
 		args.Anonymous = true
 		vars["aws:principaltype"] = "Anonymous"

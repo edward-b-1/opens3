@@ -262,7 +262,10 @@ func (s *Server) deleteObjects(c *reqCtx) error {
 			res.Errors = append(res.Errors, xmlDeleteError{Key: o.Key, Code: "InvalidArgument", Message: "Key cannot be empty"})
 			continue
 		}
-		// Per-key authorisation for non-root callers.
+		// Per-key authorisation for non-root callers, with the existing
+		// object's owner, ACL and tags (s3:ExistingObjectTag conditions), and
+		// the delete bound to the version that was authorised.
+		ctx := c.r.Context()
 		if c.identity == nil || !c.identity.IsRoot {
 			action := "s3:DeleteObject"
 			if o.VersionId != "" {
@@ -270,12 +273,16 @@ func (s *Server) deleteObjects(c *reqCtx) error {
 			}
 			req := s.authzRequest(c, action)
 			req.Key = o.Key
+			if cur, err := s.obj.StatObject(ctx, c.bucket, o.Key, o.VersionId); err == nil {
+				applyObjectContext(&req, cur)
+				ctx = object.WithExpectedObject(ctx, cur)
+			}
 			if !s.iam.Authorize(req) {
 				res.Errors = append(res.Errors, xmlDeleteError{Key: o.Key, VersionId: o.VersionId, Code: "AccessDenied", Message: "Access Denied"})
 				continue
 			}
 		}
-		dr, err := s.obj.DeleteObject(c.r.Context(), c.actor(), object.DeleteInput{Bucket: c.bucket, Key: o.Key, VersionID: o.VersionId, BypassGovernance: bypass, IfMatch: o.ETag})
+		dr, err := s.obj.DeleteObject(ctx, c.actor(), object.DeleteInput{Bucket: c.bucket, Key: o.Key, VersionID: o.VersionId, BypassGovernance: bypass, IfMatch: o.ETag})
 		if err != nil {
 			e := s3err.From(err)
 			res.Errors = append(res.Errors, xmlDeleteError{Key: o.Key, VersionId: o.VersionId, Code: string(e.Code), Message: e.Message})

@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -458,5 +459,68 @@ func TestRestrictedCredentialsCannotRotate(t *testing.T) {
 	full := admin.NewClient(e.ts.URL, ak, sk)
 	if _, err := full.RotateKey(e.ctx, ak, ""); err != nil {
 		t.Fatalf("rotate with full credentials: %v", err)
+	}
+}
+
+// TestSessionPolicyAppliesToOwnKeys: a session narrowed to S3 cannot
+// list, deactivate or delete its user's permanent keys through the IAM
+// API's self-service paths.
+func TestSessionPolicyAppliesToOwnKeys(t *testing.T) {
+	e := newEnv(t)
+	ic := e.iam(rootUser, rootPass)
+	if _, err := ic.CreateUser(e.ctx, &iam.CreateUserInput{UserName: aws.String("kim")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.AttachUserPolicy(e.ctx, &iam.AttachUserPolicyInput{UserName: aws.String("kim"), PolicyArn: aws.String("arn:aws:iam::aws:policy/consoleAdmin")}); err != nil {
+		t.Fatal(err)
+	}
+	ck, err := ic.CreateAccessKey(e.ctx, &iam.CreateAccessKeyInput{UserName: aws.String("kim")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ak, sk := *ck.AccessKey.AccessKeyId, *ck.AccessKey.SecretAccessKey
+	s3only := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"*"}]}`
+	ar, err := e.sts(ak, sk, "").AssumeRole(e.ctx, &sts.AssumeRoleInput{RoleArn: aws.String("arn:aws:iam::000000000000:role/any"), RoleSessionName: aws.String("s"), Policy: aws.String(s3only)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sIAM := iam.New(iam.Options{Region: "us-east-1", BaseEndpoint: aws.String(e.ts.URL), Credentials: staticCreds(*ar.Credentials.AccessKeyId, *ar.Credentials.SecretAccessKey, *ar.Credentials.SessionToken)})
+	if _, err := sIAM.ListAccessKeys(e.ctx, &iam.ListAccessKeysInput{}); errCode(err) != "AccessDenied" {
+		t.Fatalf("restricted session listed its user's keys: %v", err)
+	}
+	if _, err := sIAM.UpdateAccessKey(e.ctx, &iam.UpdateAccessKeyInput{AccessKeyId: aws.String(ak), Status: iamtypes.StatusTypeInactive}); errCode(err) != "AccessDenied" {
+		t.Fatalf("restricted session deactivated its user's key: %v", err)
+	}
+	if _, err := sIAM.DeleteAccessKey(e.ctx, &iam.DeleteAccessKeyInput{AccessKeyId: aws.String(ak)}); errCode(err) != "AccessDenied" {
+		t.Fatalf("restricted session deleted its user's key: %v", err)
+	}
+	// The key is still usable, and its owner can still manage it.
+	own := iam.New(iam.Options{Region: "us-east-1", BaseEndpoint: aws.String(e.ts.URL), Credentials: staticCreds(ak, sk, "")})
+	if _, err := own.ListAccessKeys(e.ctx, &iam.ListAccessKeysInput{}); err != nil {
+		t.Fatalf("owner listing own keys: %v", err)
+	}
+}
+
+// TestExistingObjectTagOnDelete: a deny keyed on an existing tag fires for
+// single and batch deletes.
+func TestExistingObjectTagOnDelete(t *testing.T) {
+	e := newEnv(t)
+	e.mkBucket("tagged")
+	if _, err := e.s3.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("tagged"), Key: aws.String("keep"), Body: strings.NewReader("k"), Tagging: aws.String("protected=true")}); err != nil {
+		t.Fatal(err)
+	}
+	e.put("tagged", "free", "f")
+	del := e.managedUser("deleter", `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::tagged/*"},
+		{"Effect":"Deny","Action":["s3:DeleteObject","s3:DeleteObjectVersion"],"Resource":"arn:aws:s3:::tagged/*","Condition":{"StringEquals":{"s3:ExistingObjectTag/protected":"true"}}}]}`)
+	if _, err := del.DeleteObject(e.ctx, &s3.DeleteObjectInput{Bucket: aws.String("tagged"), Key: aws.String("keep")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("delete of a protected object: %v", err)
+	}
+	out, err := del.DeleteObjects(e.ctx, &s3.DeleteObjectsInput{Bucket: aws.String("tagged"), Delete: &types.Delete{Objects: []types.ObjectIdentifier{{Key: aws.String("keep")}, {Key: aws.String("free")}}}})
+	if err != nil || len(out.Errors) != 1 || *out.Errors[0].Key != "keep" || len(out.Deleted) != 1 {
+		t.Fatalf("batch delete with a protected object: %v %+v", err, out)
+	}
+	if _, err := e.s3.HeadObject(e.ctx, &s3.HeadObjectInput{Bucket: aws.String("tagged"), Key: aws.String("keep")}); err != nil {
+		t.Fatal("protected object was deleted")
 	}
 }
