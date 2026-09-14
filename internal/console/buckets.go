@@ -27,7 +27,7 @@ type bucketDetail struct {
 	bucketSummary
 	Tags              []map[string]string     `json:"tags"`
 	Ownership         string                  `json:"ownership"`
-	Encryption        *meta.EncryptionRule    `json:"encryption,omitempty"`
+	Encryption        *encryptionOut          `json:"encryption,omitempty"`
 	PublicAccessBlock *meta.PublicAccessBlock `json:"publicAccessBlock,omitempty"`
 	ObjectLockConfig  *meta.ObjectLockConfig  `json:"objectLockConfig,omitempty"`
 	Policy            json.RawMessage         `json:"policy,omitempty"`
@@ -122,7 +122,7 @@ func (h *Handler) getBucket(w http.ResponseWriter, r *http.Request, s *session) 
 	if err != nil {
 		return err
 	}
-	d := bucketDetail{bucketSummary: summarize(b, s), Tags: tagsOut(b.Tags), Ownership: b.Ownership, Encryption: b.Encryption,
+	d := bucketDetail{bucketSummary: summarize(b, s), Tags: tagsOut(b.Tags), Ownership: b.Ownership, Encryption: encryptionView(b.Encryption),
 		PublicAccessBlock: b.PublicAccessBlock, ObjectLockConfig: b.ObjectLock, HasLifecycle: len(b.LifecycleXML) > 0,
 		HasCORS: len(b.CORSXML) > 0, HasNotification: len(b.NotificationXML) > 0}
 	if b.Quota != nil {
@@ -182,6 +182,19 @@ func (h *Handler) putVersioning(w http.ResponseWriter, r *http.Request, s *sessi
 // putBucketEncryption sets or clears the bucket's default encryption
 // (what the AWS console calls "default encryption" under bucket properties
 // and MinIO's console exposed under bucket settings).
+// encryptionOut is the console's JSON shape for a default-encryption rule.
+type encryptionOut struct {
+	Algorithm string `json:"algorithm"`
+	KMSKeyID  string `json:"kmsKeyId,omitempty"`
+}
+
+func encryptionView(r *meta.EncryptionRule) *encryptionOut {
+	if r == nil {
+		return nil
+	}
+	return &encryptionOut{Algorithm: r.Algorithm, KMSKeyID: r.KMSKeyID}
+}
+
 func (h *Handler) putBucketEncryption(w http.ResponseWriter, r *http.Request, s *session) error {
 	var in struct {
 		Algorithm string `json:"algorithm"` // "" (none) | AES256 | aws:kms
@@ -214,7 +227,7 @@ func (h *Handler) putBucketEncryption(w http.ResponseWriter, r *http.Request, s 
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"bucket": summarize(b, s), "encryption": b.Encryption})
+	writeJSON(w, http.StatusOK, map[string]any{"bucket": summarize(b, s), "encryption": encryptionView(b.Encryption)})
 	return nil
 }
 
