@@ -96,8 +96,10 @@ func TestIAMAPI(t *testing.T) {
 	}
 	// Alice can see herself and her own keys, but not manage users.
 	aic := e.iam(ak, sk)
-	if me, err := aic.GetUser(e.ctx, &iam.GetUserInput{}); err != nil || *me.User.UserName != "alice" {
-		t.Fatalf("self get-user: %v", err)
+	// Reading one's own user needs iam:GetUser like anything else (a
+	// self-only policy grants it; see TestIAMSelfScopedReads).
+	if _, err := aic.GetUser(e.ctx, &iam.GetUserInput{}); errCode(err) != "AccessDenied" {
+		t.Fatalf("self get-user without permission: %v", err)
 	}
 	if _, err := aic.ListUsers(e.ctx, &iam.ListUsersInput{}); errCode(err) != "AccessDenied" {
 		t.Fatalf("alice list users: %v", err)

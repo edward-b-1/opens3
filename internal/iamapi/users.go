@@ -46,10 +46,8 @@ func (h *Handler) callerOrParam(req *Request) (string, bool) {
 
 func (h *Handler) getUser(req *Request) (any, error) {
 	name, self := h.callerOrParam(req)
-	if !self {
-		if err := h.authorize(req, iam.ActionGetUser); err != nil {
-			return nil, err
-		}
+	if err := h.authorizeOn(req, iam.ActionGetUser, h.userResource(name)); err != nil {
+		return nil, err
 	}
 	if req.Identity.IsRoot && self {
 		return struct {
@@ -156,15 +154,15 @@ func (h *Handler) loginProfile(u *iam.User) xmlLoginProfile {
 }
 
 func (h *Handler) createLoginProfile(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionCreateLoginProfile); err != nil {
+	name, err := requireParam(req, "UserName")
+	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionCreateLoginProfile, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
 		return nil, errAccessDeniedMsg(err.Error())
-	}
-	name, err := requireParam(req, "UserName")
-	if err != nil {
-		return nil, err
 	}
 	pw, err := requireParam(req, "Password")
 	if err != nil {
@@ -187,15 +185,15 @@ func (h *Handler) createLoginProfile(req *Request) (any, error) {
 }
 
 func (h *Handler) updateLoginProfile(req *Request) (any, error) {
-	if err := h.authorize(req, iam.ActionUpdateLoginProfile); err != nil {
+	name, err := requireParam(req, "UserName")
+	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeOn(req, iam.ActionUpdateLoginProfile, h.userResource(name)); err != nil {
 		return nil, err
 	}
 	if err := iam.CheckCredentialIssuer(req.Identity); err != nil {
 		return nil, errAccessDeniedMsg(err.Error())
-	}
-	name, err := requireParam(req, "UserName")
-	if err != nil {
-		return nil, err
 	}
 	u, err := h.IAM.GetUser(name)
 	if err != nil || !u.HasPassword() {
@@ -225,11 +223,9 @@ func (h *Handler) deleteLoginProfile(req *Request) (any, error) {
 }
 
 func (h *Handler) getLoginProfile(req *Request) (any, error) {
-	name, self := h.callerOrParam(req)
-	if !self {
-		if err := h.authorize(req, iam.ActionGetLoginProfile); err != nil {
-			return nil, err
-		}
+	name, _ := h.callerOrParam(req)
+	if err := h.authorizeOn(req, iam.ActionGetLoginProfile, h.userResource(name)); err != nil {
+		return nil, err
 	}
 	u, err := h.IAM.GetUser(name)
 	if err != nil || !u.HasPassword() {

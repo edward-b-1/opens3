@@ -227,11 +227,9 @@ func (h *Handler) detachUserPolicy(req *Request) (any, error) {
 }
 
 func (h *Handler) listAttachedUserPolicies(req *Request) (any, error) {
-	name, self := h.callerOrParam(req)
-	if !self {
-		if err := h.authorize(req, iam.ActionListAttachedUser); err != nil {
-			return nil, err
-		}
+	name, _ := h.callerOrParam(req)
+	if err := h.authorizeOn(req, iam.ActionListAttachedUser, h.userResource(name)); err != nil {
+		return nil, err
 	}
 	u, err := h.IAM.GetUser(name)
 	if err != nil {

@@ -13,6 +13,19 @@ tagged tree.
 
 ## [Unreleased]
 
+### Security
+
+- `s3:ExistingObjectTag` conditions apply to PutObject and CopyObject
+  overwrites (the object being replaced is loaded), as they already did
+  to deletes.
+- IAM API: reading a user, its login profile or its attached policies,
+  and creating or updating a login profile, are evaluated against the
+  target user's ARN, including for the caller's own user, so session
+  policies and self-only policies apply to them.
+- Admin API: every route that targets a user, group, policy or key is
+  evaluated against that target's ARN; creating a key is evaluated
+  against the user it is for.
+
 ## [0.3.1] - 2026-09-15
 
 A console fix and the migration guide. No on-disk format or API change.

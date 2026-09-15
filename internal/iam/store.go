@@ -1051,3 +1051,9 @@ func (s *Store) SetPolicyPath(name, path string) error {
 		return tx.Put([]byte(nsPolicy+name), mustJSON(p))
 	})
 }
+
+// IsBuiltInPolicy reports whether name is one of the server-owned policies.
+func (s *Store) IsBuiltInPolicy(name string) bool {
+	_, ok := builtinPolicies[name]
+	return ok
+}

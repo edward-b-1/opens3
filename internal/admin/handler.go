@@ -104,7 +104,7 @@ func (h *Handler) routes() {
 	reg("DELETE /users/{name}/password", "iam:UpdateLoginProfile", h.clearUserPassword)
 
 	reg("GET /keys", "iam:ListAccessKeys", h.listKeys)
-	reg("POST /keys", "iam:CreateAccessKey", h.createKey)
+	reg("POST /keys", "", h.createKey) // authorised in the handler, on the target user
 	reg("GET /keys/{ak}", "iam:ListAccessKeys", h.getKey)
 	reg("DELETE /keys/{ak}", "iam:DeleteAccessKey", h.deleteKey)
 	reg("POST /keys/{ak}/enable", "iam:UpdateAccessKey", h.setKeyStatus(true))
@@ -140,8 +140,42 @@ func (h *Handler) routes() {
 	})
 }
 
+// resourceFor derives the IAM resource ARN an admin route acts on from
+// its path: the user, group, policy or key target. Routes without a
+// target (lists, info) evaluate against the account.
+func (h *Handler) resourceFor(r *http.Request) string {
+	acct := h.opt.IAM.AccountID()
+	p := r.URL.Path
+	switch {
+	case strings.Contains(p, "/users/"):
+		if n := r.PathValue("name"); n != "" {
+			return iam.UserARN(acct, n)
+		}
+	case strings.Contains(p, "/groups/"):
+		if n := r.PathValue("name"); n != "" {
+			return iam.GroupARN(acct, n)
+		}
+	case strings.Contains(p, "/policies/"):
+		if n := r.PathValue("name"); n != "" {
+			return iam.PolicyARN(acct, n, h.opt.IAM.IsBuiltInPolicy(n))
+		}
+	case strings.Contains(p, "/keys/"):
+		if ak := r.PathValue("ak"); ak != "" {
+			if k, err := h.opt.IAM.GetKey(ak); err == nil {
+				return iam.UserARN(acct, k.User)
+			}
+		}
+	case strings.Contains(p, "/kms/keys/"):
+		if id := r.PathValue("id"); id != "" {
+			return iam.KMSKeyARN(acct, id)
+		}
+	}
+	return ""
+}
+
 // op wraps an endpoint with authentication, authorisation and JSON
-// encoding.
+// encoding. An empty action means the handler authorises itself (it
+// needs the request body to know the target).
 func (h *Handler) op(name string, fn handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := h.authenticate(w, r)
@@ -149,7 +183,7 @@ func (h *Handler) op(name string, fn handlerFunc) http.HandlerFunc {
 			writeErr(w, err)
 			return
 		}
-		if !h.opt.IAM.Authorize(iam.Request{Identity: c.id, Action: name}) {
+		if name != "" && !h.opt.IAM.Authorize(iam.Request{Identity: c.id, Action: name, Resource: h.resourceFor(r)}) {
 			h.opt.Log.Warn("admin: denied", "op", name, "user", c.id.Name())
 			writeErr(w, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: "not authorised for " + name})
 			return
@@ -567,6 +601,9 @@ func (h *Handler) createKey(c *req) (any, error) {
 	}
 	if in.User == "" {
 		return nil, invalid("user is required")
+	}
+	if !h.opt.IAM.Authorize(iam.Request{Identity: c.id, Action: "iam:CreateAccessKey", Resource: iam.UserARN(h.opt.IAM.AccountID(), in.User)}) {
+		return nil, &Error{Status: http.StatusForbidden, Code: "AccessDenied", Message: "not authorised for iam:CreateAccessKey on user " + in.User}
 	}
 	if in.Kind == "" {
 		in.Kind = iam.KindUser

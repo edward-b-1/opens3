@@ -248,9 +248,13 @@ func routeObject(c *reqCtx, m string, q url.Values) *operation {
 			}
 			return objectOp("UploadPart", "s3:PutObject", (*Server).uploadPart)
 		case c.r.Header.Get("x-amz-copy-source") != "":
-			return objectOp("CopyObject", "s3:PutObject", (*Server).copyObject)
+			o := objectOp("CopyObject", "s3:PutObject", (*Server).copyObject)
+			o.needsObject = true // s3:ExistingObjectTag conditions apply to overwrites
+			return o
 		}
-		return objectOp("PutObject", "s3:PutObject", (*Server).putObject)
+		o := objectOp("PutObject", "s3:PutObject", (*Server).putObject)
+		o.needsObject = true
+		return o
 	case http.MethodDelete:
 		switch {
 		case has(q, "tagging"):

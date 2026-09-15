@@ -12,3 +12,4 @@ coverage.html
 /tests/rotation/results/
 /tests/migration/results*/
 /tests/console/.cache/
+__pycache__/

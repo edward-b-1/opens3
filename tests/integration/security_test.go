@@ -524,3 +524,95 @@ func TestExistingObjectTagOnDelete(t *testing.T) {
 		t.Fatal("protected object was deleted")
 	}
 }
+
+// TestExistingObjectTagOnOverwrite: a deny keyed on an existing tag fires
+// when the object is replaced by PutObject or CopyObject.
+func TestExistingObjectTagOnOverwrite(t *testing.T) {
+	e := newEnv(t)
+	e.mkBucket("overwrite")
+	if _, err := e.s3.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("overwrite"), Key: aws.String("keep"), Body: strings.NewReader("k"), Tagging: aws.String("protected=true")}); err != nil {
+		t.Fatal(err)
+	}
+	e.put("overwrite", "src", "s")
+	w := e.managedUser("writer2", `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"s3:*","Resource":["arn:aws:s3:::overwrite","arn:aws:s3:::overwrite/*"]},
+		{"Effect":"Deny","Action":"s3:PutObject","Resource":"arn:aws:s3:::overwrite/*","Condition":{"StringEquals":{"s3:ExistingObjectTag/protected":"true"}}}]}`)
+	if _, err := w.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("overwrite"), Key: aws.String("keep"), Body: strings.NewReader("x")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("overwrite of a protected object: %v", err)
+	}
+	if _, err := w.CopyObject(e.ctx, &s3.CopyObjectInput{Bucket: aws.String("overwrite"), Key: aws.String("keep"), CopySource: aws.String("/overwrite/src")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("copy over a protected object: %v", err)
+	}
+	if _, err := w.PutObject(e.ctx, &s3.PutObjectInput{Bucket: aws.String("overwrite"), Key: aws.String("new"), Body: strings.NewReader("x")}); err != nil {
+		t.Fatalf("put of a new key: %v", err)
+	}
+	if b, _ := e.get("overwrite", "keep"); b != "k" {
+		t.Fatal("protected object was replaced")
+	}
+}
+
+// TestIAMSelfScopedReads: a self-only policy grants GetUser and
+// CreateLoginProfile on the caller and nothing else; a session limited
+// to S3 cannot read its own user.
+func TestIAMSelfScopedReads(t *testing.T) {
+	e := newEnv(t)
+	ic := e.iam(rootUser, rootPass)
+	for _, u := range []string{"selfie", "other"} {
+		if _, err := ic.CreateUser(e.ctx, &iam.CreateUserInput{UserName: aws.String(u)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetUser","iam:GetLoginProfile","iam:CreateLoginProfile","iam:ListAttachedUserPolicies"],"Resource":"arn:aws:iam::*:user/${aws:username}"}]}`
+	cp, err := ic.CreatePolicy(e.ctx, &iam.CreatePolicyInput{PolicyName: aws.String("self-reads"), PolicyDocument: aws.String(doc)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.AttachUserPolicy(e.ctx, &iam.AttachUserPolicyInput{UserName: aws.String("selfie"), PolicyArn: cp.Policy.Arn}); err != nil {
+		t.Fatal(err)
+	}
+	ck, _ := ic.CreateAccessKey(e.ctx, &iam.CreateAccessKeyInput{UserName: aws.String("selfie")})
+	me := iam.New(iam.Options{Region: "us-east-1", BaseEndpoint: aws.String(e.ts.URL), Credentials: staticCreds(*ck.AccessKey.AccessKeyId, *ck.AccessKey.SecretAccessKey, "")})
+	if _, err := me.GetUser(e.ctx, &iam.GetUserInput{}); err != nil {
+		t.Fatalf("self-only GetUser on self: %v", err)
+	}
+	if _, err := me.GetUser(e.ctx, &iam.GetUserInput{UserName: aws.String("other")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("self-only GetUser on another user: %v", err)
+	}
+	if _, err := me.ListAttachedUserPolicies(e.ctx, &iam.ListAttachedUserPoliciesInput{UserName: aws.String("selfie")}); err != nil {
+		t.Fatalf("self-only ListAttachedUserPolicies: %v", err)
+	}
+	if _, err := me.CreateLoginProfile(e.ctx, &iam.CreateLoginProfileInput{UserName: aws.String("selfie"), Password: aws.String("Password-123456")}); err != nil {
+		t.Fatalf("self-only CreateLoginProfile on self: %v", err)
+	}
+	if _, err := me.CreateLoginProfile(e.ctx, &iam.CreateLoginProfileInput{UserName: aws.String("other"), Password: aws.String("Password-123456")}); errCode(err) != "AccessDenied" {
+		t.Fatalf("self-only CreateLoginProfile on another user: %v", err)
+	}
+	// A session narrowed to S3 cannot even read its own user.
+	ar, err := e.sts(*ck.AccessKey.AccessKeyId, *ck.AccessKey.SecretAccessKey, "").AssumeRole(e.ctx, &sts.AssumeRoleInput{RoleArn: aws.String("arn:aws:iam::000000000000:role/any"), RoleSessionName: aws.String("s"),
+		Policy: aws.String(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"*"}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := iam.New(iam.Options{Region: "us-east-1", BaseEndpoint: aws.String(e.ts.URL), Credentials: staticCreds(*ar.Credentials.AccessKeyId, *ar.Credentials.SecretAccessKey, *ar.Credentials.SessionToken)})
+	if _, err := sess.GetUser(e.ctx, &iam.GetUserInput{}); errCode(err) != "AccessDenied" {
+		t.Fatalf("narrowed session read its own user: %v", err)
+	}
+
+	// The admin API evaluates the same self-only policy against the route's
+	// target: creating a key for oneself is allowed, for another user not.
+	selfAdmin := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:CreateAccessKey","iam:ListAccessKeys"],"Resource":"arn:aws:iam::*:user/${aws:username}"}]}`
+	ap, err := ic.CreatePolicy(e.ctx, &iam.CreatePolicyInput{PolicyName: aws.String("self-admin"), PolicyDocument: aws.String(selfAdmin)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ic.AttachUserPolicy(e.ctx, &iam.AttachUserPolicyInput{UserName: aws.String("selfie"), PolicyArn: ap.Policy.Arn}); err != nil {
+		t.Fatal(err)
+	}
+	ac := admin.NewClient(e.ts.URL, *ck.AccessKey.AccessKeyId, *ck.AccessKey.SecretAccessKey)
+	if _, err := ac.CreateKey(e.ctx, admin.CreateKeyRequest{User: "selfie"}); err != nil {
+		t.Fatalf("admin API: key for oneself under a self-only policy: %v", err)
+	}
+	if _, err := ac.CreateKey(e.ctx, admin.CreateKeyRequest{User: "other"}); err == nil || !strings.Contains(err.Error(), "AccessDenied") {
+		t.Fatalf("admin API: key for another user under a self-only policy: %v", err)
+	}
+}
