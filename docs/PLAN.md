@@ -173,8 +173,10 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
   server and `opens3 master` from the Dockerfile, encrypted records written
   and verified by `examples/python/encrypted_data.py` across rotate, retire,
   and moves between the key file and `OPENS3_MASTER_KEY`.
-- `make migration-test` — the MinIO migration procedure (manual chapter
-  11) against a MinIO built from source at a pinned release in Docker:
+- `make migration-test` / `make migration-test-silo` — the migration
+  procedure (manual chapter 11) against a MinIO, and against Silo (the
+  maintained MinIO fork), each built from source at a pinned release in
+  Docker:
   rclone copy, tag copy, identity export with `mc admin` and import with
   boto3, verification, `opens3 fsck --verify`.
 - `go run ./tools/apicoverage` — regenerates `docs/API-COVERAGE.md`, the

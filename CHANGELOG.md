@@ -19,8 +19,9 @@ tagged tree.
   (rclone for the objects, identity export with `mc admin`, import with
   `examples/migrate/import_identities.py`, tags with `copy_tags.py`,
   verification with `opens3 fsck`), tested end to end by
-  `make migration-test` against a MinIO built from source at a pinned
-  release in Docker.
+  `make migration-test` against a MinIO and by `make migration-test-silo`
+  against a Silo (the maintained MinIO fork), each built from source at a
+  pinned release in Docker.
 
 ## [0.3.0] - 2026-09-14
 

@@ -2,7 +2,8 @@
 # MinIO to OpenS3 migration, end to end, entirely in Docker: the procedure
 # the user manual describes (chapter 11), run against a real MinIO.
 #
-#   tests/migration/run.sh
+#   tests/migration/run.sh                        # source: MinIO
+#   MIGRATION_SOURCE=silo tests/migration/run.sh  # source: Silo, the maintained MinIO fork
 #
 # MinIO and its client are built from source at pinned releases
 # (Dockerfile.minio; nothing is pulled from a MinIO registry). The MinIO
@@ -17,6 +18,7 @@
 # result.
 #
 # Environment:
+#   MIGRATION_SOURCE      minio (default) or silo: which server to migrate from
 #   MIGRATION_KEEP        set to 1 to keep the OpenS3 data directory
 #   MIGRATION_LOG_LEVEL   OpenS3 log level (default warn)
 set -euo pipefail
@@ -24,26 +26,31 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
-MINIO_IMAGE="opens3-migration-minio:local" # built by Dockerfile.minio (minio + mc)
+SOURCE="${MIGRATION_SOURCE:-minio}"
+case "$SOURCE" in
+  minio) MINIO_IMAGE="opens3-migration-minio:local"; MINIO_DOCKERFILE="Dockerfile.minio"; CLIENT=mc;   SOURCE_NAME="MinIO" ;;
+  silo)  MINIO_IMAGE="opens3-migration-silo:local";  MINIO_DOCKERFILE="Dockerfile.silo";  CLIENT=mcli; SOURCE_NAME="Silo" ;;
+  *) echo "MIGRATION_SOURCE must be minio or silo" >&2; exit 2 ;;
+esac
 RCLONE_IMAGE="rclone/rclone:1.69.1"
 PY_IMAGE="python:3.13.15-slim"
 BOTO3_VERSION="1.43.93"
 IMAGE="opens3-migration-test:local"
 TAG="$$"
-MINIO_NAME="opens3-migration-minio-$TAG"
+MINIO_NAME="opens3-migration-source-$TAG"
 OPENS3_NAME="opens3-migration-opens3-$TAG"
-MINIO_VOL="opens3-migration-minio-$TAG"
+MINIO_VOL="opens3-migration-source-$TAG"
 MINIO_USER=minioadmin
 MINIO_PASSWORD=minioadmin-migration-test
 ROOT_USER=opens3admin
 ROOT_PASSWORD=opens3admin-migration-test
 UID_GID="$(id -u):$(id -g)"
 
-RESULTS="$HERE/results"
+RESULTS="$HERE/results-$SOURCE"
 rm -rf "$RESULTS"
 mkdir -p "$RESULTS"
 : >"$RESULTS/results.tsv"
-log() { echo "[migration] $*" >&2; }
+log() { echo "[migration/$SOURCE] $*" >&2; }
 command -v docker >/dev/null || { log "docker not found"; exit 1; }
 
 STEP=0
@@ -130,9 +137,9 @@ py() {
 # --- images ---------------------------------------------------------------------
 build_image() { docker build -q -t "$IMAGE" "$REPO"; }
 build_minio() {
-  # Cached after the first build (several minutes: MinIO is large).
+  # Cached after the first build (several minutes: the server is large).
   docker image inspect "$MINIO_IMAGE" >/dev/null 2>&1 && { echo "using cached $MINIO_IMAGE"; return 0; }
-  docker build -q -t "$MINIO_IMAGE" -f "$HERE/Dockerfile.minio" "$HERE"
+  docker build -q -t "$MINIO_IMAGE" -f "$HERE/$MINIO_DOCKERFILE" "$HERE"
 }
 pull_images() {
   for i in "$RCLONE_IMAGE" "$PY_IMAGE"; do
@@ -142,7 +149,7 @@ pull_images() {
     pip install -q --no-warn-script-location --target /work/py/site "boto3==$BOTO3_VERSION"
 }
 step "build the OpenS3 image" build_image
-step "build MinIO and mc from source (Dockerfile.minio)" build_minio
+step "build $SOURCE_NAME and $CLIENT from source ($MINIO_DOCKERFILE)" build_minio
 step "pull rclone and python with boto3" pull_images
 
 # --- servers --------------------------------------------------------------------
@@ -169,7 +176,7 @@ start_opens3() {
   docker logs "$OPENS3_NAME" 2>&1 | tail -20
   return 1
 }
-step "start MinIO" start_minio
+step "start $SOURCE_NAME" start_minio
 step "start OpenS3" start_opens3
 
 # --- seed MinIO ------------------------------------------------------------------
@@ -184,6 +191,7 @@ seed() {
 EOF
   mcsh '
 set -e
+mc() { command '"$CLIENT"' "$@"; }
 mc mb src/photos src/docs src/archive
 mc version enable src/archive
 mc cp --attr "x-amz-meta-owner=alice;x-amz-meta-camera=x100" --tags "env=prod&team=blue" /work/seed/photo.bin src/photos/2026/photo.bin
@@ -201,7 +209,7 @@ mc admin policy attach src readonly --group analysts
 mc ls --recursive src
 '
 }
-step "seed MinIO with buckets, objects, versions, users, groups and policies" seed
+step "seed $SOURCE_NAME with buckets, objects, versions, users, groups and policies" seed
 
 # --- the migration, as the manual describes it ------------------------------------
 copy_objects() {
@@ -220,6 +228,7 @@ step "copy the object tags (rclone does not)" py /migrate/copy_tags.py --src "$M
 export_identities() {
   mcsh '
 set -e
+mc() { command '"$CLIENT"' "$@"; }
 mc admin user list src --json > /work/export/users.json
 mc admin group list src --json > /work/export/groups.json
 for p in $(mc admin policy list src); do mc admin policy info src "$p" > "/work/export/policies/$p.json"; done
@@ -227,7 +236,7 @@ for g in $(mc admin group list src); do mc admin group info src "$g" --json > "/
 ls -la /work/export /work/export/policies /work/export/groups
 '
 }
-step "export users, groups and policies from MinIO with mc admin" export_identities
+step "export users, groups and policies from $SOURCE_NAME with $CLIENT admin" export_identities
 step "import the identities into OpenS3 (new keys issued)" expect "keys issued" py /migrate/import_identities.py --endpoint "$OPENS3" --access-key "$ROOT_USER" --secret-key "$ROOT_PASSWORD" --export /work/export --out /work/new-keys.csv
 step "a second import changes nothing" expect "0 keys issued" py /migrate/import_identities.py --endpoint "$OPENS3" --access-key "$ROOT_USER" --secret-key "$ROOT_PASSWORD" --export /work/export --out /work/new-keys-2.csv
 

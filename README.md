@@ -79,7 +79,7 @@ Docker: `docker compose up` with `OPENS3_ROOT_USER` and `OPENS3_ROOT_PASSWORD` s
 
 ## Documentation
 
-- **`docs/MANUAL.md`** — the user manual (single file): getting started, configuration, identity, buckets, encryption, console, operations, troubleshooting, migrating from MinIO
+- **`docs/MANUAL.md`** — the user manual (single file): getting started, configuration, identity, buckets, encryption, console, operations, troubleshooting, migrating from MinIO or Silo
 
 - `docs/PLAN.md` — architecture, feature matrix, roadmap
 - `docs/SURVEY.md` — Amazon S3, MinIO history, the alternatives, positioning

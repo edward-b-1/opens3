@@ -27,7 +27,8 @@ Pinned versions (update deliberately, all in one commit): GoReleaser
 
 1. Start from a clean `main` with `make ci` green and, for a minor
    release, `make conformance`, `make awscli`, `make console-test`,
-   `make rotation-test` and `make migration-test` run
+   `make rotation-test`, `make migration-test` and
+   `make migration-test-silo` run
    so `docs/CONFORMANCE.md` and `docs/AWSCLI.md` describe this version
    (`go run ./tools/apicoverage` for `docs/API-COVERAGE.md`).
 2. Update `CHANGELOG.md`: move the `[Unreleased]` entries into a new

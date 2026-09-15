@@ -40,6 +40,70 @@ from botocore.exceptions import ClientError
 
 BUILTIN = {"readonly", "readwrite", "writeonly", "diagnostics", "consoleAdmin"}
 
+# MinIO's administrative actions ("admin:...") and their OpenS3 names (the
+# same table the server uses to explain legacy names). Actions with no
+# equivalent (s3tables, cluster operations) are dropped with a warning.
+ADMIN_ACTIONS = {
+    "admin:ServerInfo": "opens3:ServerInfo", "admin:Health": "opens3:Health", "admin:Prometheus": "opens3:Metrics", "admin:Metrics": "opens3:Metrics",
+    "admin:StorageInfo": "opens3:ServerInfo", "admin:DataUsageInfo": "opens3:ServerInfo",
+    "admin:ListUsers": "iam:ListUsers", "admin:GetUser": "iam:GetUser", "admin:AddUser": "iam:CreateUser", "admin:CreateUser": "iam:CreateUser",
+    "admin:RemoveUser": "iam:DeleteUser", "admin:DeleteUser": "iam:DeleteUser", "admin:EnableUser": "iam:UpdateUser", "admin:DisableUser": "iam:UpdateUser",
+    "admin:UpdateUser": "iam:UpdateUser", "admin:SetUserPolicies": "iam:AttachUserPolicy", "admin:SetUserPassword": "iam:UpdateLoginProfile",
+    "admin:ListKeys": "iam:ListAccessKeys", "admin:GetKey": "iam:ListAccessKeys", "admin:AddKey": "iam:CreateAccessKey", "admin:CreateKey": "iam:CreateAccessKey",
+    "admin:RemoveKey": "iam:DeleteAccessKey", "admin:DeleteKey": "iam:DeleteAccessKey", "admin:EnableKey": "iam:UpdateAccessKey", "admin:DisableKey": "iam:UpdateAccessKey",
+    "admin:RotateKey": "iam:UpdateAccessKey", "admin:UpdateKey": "iam:UpdateAccessKey", "admin:CreateServiceAccount": "iam:CreateAccessKey",
+    "admin:ListServiceAccounts": "iam:ListAccessKeys", "admin:RemoveServiceAccount": "iam:DeleteAccessKey", "admin:UpdateServiceAccount": "iam:UpdateAccessKey",
+    "admin:ListTemporaryAccounts": "iam:ListAccessKeys",
+    "admin:ListGroups": "iam:ListGroups", "admin:GetGroup": "iam:GetGroup", "admin:AddGroup": "iam:CreateGroup", "admin:CreateGroup": "iam:CreateGroup",
+    "admin:UpdateGroup": "iam:UpdateGroup", "admin:RemoveGroup": "iam:DeleteGroup", "admin:DeleteGroup": "iam:DeleteGroup", "admin:UpdateGroupMembers": "iam:AddUserToGroup",
+    "admin:AddUserToGroup": "iam:AddUserToGroup", "admin:RemoveUserFromGroup": "iam:RemoveUserFromGroup", "admin:EnableGroup": "iam:UpdateGroup", "admin:DisableGroup": "iam:UpdateGroup",
+    "admin:ListUserPolicies": "iam:ListPolicies", "admin:ListPolicies": "iam:ListPolicies", "admin:GetPolicy": "iam:GetPolicy", "admin:AddPolicy": "iam:CreatePolicy",
+    "admin:CreatePolicy": "iam:CreatePolicy", "admin:PutPolicy": "iam:CreatePolicy", "admin:RemovePolicy": "iam:DeletePolicy", "admin:DeletePolicy": "iam:DeletePolicy",
+    "admin:AttachUserOrGroupPolicy": "iam:AttachUserPolicy", "admin:UpdatePolicyAssociation": "iam:AttachUserPolicy",
+    "admin:ListBuckets": "s3:ListAllMyBuckets", "admin:RemoveBucket": "s3:DeleteBucket",
+    "admin:ListKMSKeys": "kms:ListKeys", "admin:CreateKMSKey": "kms:CreateKey", "admin:DeleteKMSKey": "kms:ScheduleKeyDeletion", "admin:KMSCreateKey": "kms:CreateKey",
+    "admin:*": ["iam:*", "kms:*", "sts:*", "opens3:*"],
+}
+
+
+def translate(doc: dict, name: str) -> tuple[dict | None, list[str]]:
+    """Rewrite a MinIO policy for OpenS3: administrative actions renamed,
+    a missing Resource becomes "*", statements with nothing left dropped.
+    Returns the document (None if nothing remains) and the dropped actions."""
+    dropped: list[str] = []
+    out = []
+    stmts = doc.get("Statement", [])
+    if isinstance(stmts, dict):
+        stmts = [stmts]
+    for st in stmts:
+        st = dict(st)
+        actions = st.get("Action", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        kept: list[str] = []
+        for a in actions:
+            if a.startswith("admin:"):
+                m = ADMIN_ACTIONS.get(a)
+                if m is None:
+                    dropped.append(a)
+                elif isinstance(m, list):
+                    kept.extend(m)
+                else:
+                    kept.append(m)
+            elif a.split(":")[0] in ("s3", "iam", "kms", "sts", "opens3") or a == "*":
+                kept.append(a)
+            else:
+                dropped.append(a)
+        if not kept:
+            continue
+        st["Action"] = sorted(set(kept))
+        if "Resource" not in st:
+            st["Resource"] = "*"
+        out.append(st)
+    if not out:
+        return None, dropped
+    return {"Version": doc.get("Version", "2012-10-17"), "Statement": out}, dropped
+
 
 def read_json_lines(path: Path) -> list[dict]:
     """mc --json prints one JSON object per line (or one object)."""
@@ -106,6 +170,7 @@ def main() -> None:
 
     # Policies.
     created_policies = 0
+    skipped_policies: set[str] = set()
     for f in sorted((args.export / "policies").glob("*.json")) if (args.export / "policies").is_dir() else []:
         name = f.stem
         if name in BUILTIN:
@@ -114,6 +179,14 @@ def main() -> None:
         doc = policy_document(json.loads(f.read_text()))
         if doc is None:
             print(f"policy {name}: no policy document found in {f}, skipped", file=sys.stderr)
+            skipped_policies.add(name)
+            continue
+        doc, dropped = translate(doc, name)
+        if dropped:
+            print(f"policy {name}: no OpenS3 equivalent for {', '.join(sorted(set(dropped)))}; those actions dropped")
+        if doc is None:
+            print(f"policy {name}: nothing remains after translation, skipped (users will not have it attached)")
+            skipped_policies.add(name)
             continue
         if args.dry_run:
             print(f"policy {name}: would create")
@@ -146,6 +219,9 @@ def main() -> None:
                 raise
             print(f"group {name}: exists")
         for p in split_policies(g.get("groupPolicy") or g.get("policy")):
+            if p in skipped_policies:
+                print(f"group {name}: policy {p} was skipped, not attached")
+                continue
             iam.attach_group_policy(GroupName=name, PolicyArn=arn(p))
 
     # Users.
@@ -167,6 +243,9 @@ def main() -> None:
                 raise
             print(f"user {name}: exists")
         for p in policies:
+            if p in skipped_policies:
+                print(f"user {name}: policy {p} was skipped, not attached")
+                continue
             iam.attach_user_policy(UserName=name, PolicyArn=arn(p))
         for gname, g in groups.items():
             if name in (g.get("members") or []):

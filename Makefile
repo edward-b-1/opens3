@@ -72,9 +72,14 @@ rotation-test:
 
 # MinIO to OpenS3 migration, as the manual describes it, against a real
 # MinIO (needs Docker; pulls a pinned MinIO release from quay.io).
-.PHONY: migration-test
+.PHONY: migration-test migration-test-silo
 migration-test:
 	tests/migration/run.sh
+
+# The same procedure from Silo, the maintained MinIO fork (built from
+# source at a pinned release, with its client mcli).
+migration-test-silo:
+	MIGRATION_SOURCE=silo tests/migration/run.sh
 
 # Compile the user manual (docs/manual/src/*.md) into docs/MANUAL.md.
 .PHONY: manual

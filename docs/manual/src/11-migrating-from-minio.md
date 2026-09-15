@@ -1,4 +1,4 @@
-# 11. Migrating from MinIO
+# 11. Migrating from MinIO or Silo
 
 OpenS3 speaks the same S3 API as MinIO, so the way to move is to run both
 servers side by side, copy the objects through the API, recreate the
@@ -94,10 +94,13 @@ examples/migrate/import_identities.py --endpoint http://opens3:9000 \
     --export export --out new-keys.csv
 ```
 
-This creates every custom policy as it is, since MinIO and OpenS3 use the
-same policy language; maps MinIO's built-in policy names (`readonly`,
-`readwrite`, `writeonly`, `diagnostics`, `consoleAdmin`) to OpenS3's
-built-ins of the same names; creates the groups and users with the same
+This creates every custom policy, since MinIO and OpenS3 use the same
+policy language, renaming MinIO's administrative actions (`admin:...`) to
+OpenS3's (`iam:`, `kms:`, `opens3:`) and dropping the few with no
+equivalent, such as MinIO's cluster operations and `s3tables`, which it
+reports; maps MinIO's built-in policy names (`readonly`, `readwrite`,
+`writeonly`, `diagnostics`, `consoleAdmin`) to OpenS3's built-ins of the
+same names; creates the groups and users with the same
 attachments and memberships; and issues each enabled user one new access
 key pair, written to `new-keys.csv`. Hand each user their line and delete
 the file. Users that were disabled in MinIO are created without a key.
@@ -148,6 +151,18 @@ it.
 - **Objects encrypted with SSE-C** cannot be copied by a tool that does
   not hold the customer's key; clients must move those themselves.
 
+## Migrating from Silo
+
+Silo (github.com/pgsty/silo) is the maintained fork of MinIO: it keeps
+MinIO's S3 API, administration API, `MINIO_*` settings and on-disk
+format, and ships MinIO's client renamed `mcli`. Everything above applies
+unchanged. Point rclone at the Silo endpoint, and use `mcli` where the
+steps say `mc` (`mcli alias set`, `mcli admin user list`, and so on);
+the exports have the same shape and `import_identities.py` reads them as
+is. If you moved from MinIO to Silo earlier, the identities you carried
+across then come across again the same way.
+
 `tests/migration/run.sh` in the source repository runs this whole
-procedure in Docker against a MinIO built from source at a pinned
-release, so the steps above are tested against that release.
+procedure in Docker against a MinIO, and again against a Silo, each
+built from source at a pinned release, so the steps above are tested
+against both.

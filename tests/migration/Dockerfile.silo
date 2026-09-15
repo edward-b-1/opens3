@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1
+# Silo (the maintained MinIO fork, github.com/pgsty/silo) and its client
+# mcli (github.com/pgsty/mc), built from source at pinned release tags for
+# the migration test. Both forks keep MinIO's module paths, so they are
+# cloned at the tag rather than fetched with `go install`.
+FROM golang:1.27-alpine AS build
+ARG SILO_VERSION=RELEASE.2026-09-03T13-18-01Z
+ARG MCLI_VERSION=RELEASE.2026-09-13T00-00-00Z
+RUN apk add --no-cache git
+ENV CGO_ENABLED=0 GOFLAGS=-trimpath
+RUN git clone --depth 1 --branch ${SILO_VERSION} https://github.com/pgsty/silo /src/silo \
+ && cd /src/silo && go build -o /out/silo . \
+ && git clone --depth 1 --branch ${MCLI_VERSION} https://github.com/pgsty/mc /src/mc \
+ && cd /src/mc && go build -o /out/mcli .
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/silo /out/mcli /usr/local/bin/
+VOLUME /data
+ENTRYPOINT ["silo"]
