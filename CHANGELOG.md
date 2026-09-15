@@ -13,6 +13,12 @@ tagged tree.
 
 ## [Unreleased]
 
+### Fixed
+
+- Console: the sections menu button was visible on wide screens, where the
+  sections are always shown and it had nothing to toggle; it now appears
+  only on narrow screens, and choosing a section there closes the menu.
+
 ### Added
 
 - Manual chapter 11, "Migrating from MinIO": the API-based procedure

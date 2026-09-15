@@ -345,3 +345,29 @@ test('login refuses a wrong password and an access key pair', async ({ page }) =
   await expect(page.locator('#app')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('the menu button appears only on narrow screens and toggles the sections', async ({ page }) => {
+  const errors = watch(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await loginRoot(page);
+  const toggle = page.getByRole('button', { name: 'Toggle navigation' });
+  const nav = page.getByRole('navigation', { name: 'Sections' });
+  await expect(toggle).toBeHidden();
+  await expect(nav).toBeVisible();
+  // The brand is the way home.
+  await page.goto('/console/#/identity');
+  await page.getByRole('link', { name: 'OpenS3' }).first().click();
+  await expect(page).toHaveURL(/#\/buckets/);
+  // Narrow: the sections are hidden until the button opens them, and
+  // choosing one closes them again.
+  await page.setViewportSize({ width: 600, height: 800 });
+  await expect(toggle).toBeVisible();
+  await expect(nav).toBeHidden();
+  await toggle.click();
+  await expect(nav).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await nav.getByRole('link', { name: 'Identity' }).click();
+  await expect(page).toHaveURL(/#\/identity/);
+  await expect(nav).toBeHidden();
+  expect(errors).toEqual([]);
+});

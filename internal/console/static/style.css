@@ -89,10 +89,13 @@ p { margin: 0 0 8px; }
 .sidebar a.active { background: var(--accent-soft); color: var(--accent); }
 .sidebar-foot { margin-top: auto; padding: 8px 12px; color: var(--muted); font-size: 12px; }
 .main { padding: 20px 24px 60px; min-width: 0; }
-.nav-toggle { display: none; }
+/* The menu button exists for narrow screens only; .btn.nav-toggle outranks
+   the later .btn { display: inline-flex } rule, which used to show it
+   everywhere with nothing to toggle. */
+.btn.nav-toggle { display: none; }
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; }
-  .nav-toggle { display: inline-flex; }
+  .btn.nav-toggle { display: inline-flex; }
   .sidebar { display: none; border-right: 0; border-bottom: 1px solid var(--border); }
   .sidebar.open { display: flex; }
   .main { padding: 14px; }

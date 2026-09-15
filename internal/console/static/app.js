@@ -127,6 +127,13 @@
     const open = document.getElementById('nav').classList.toggle('open');
     e.currentTarget.setAttribute('aria-expanded', String(open));
   });
+  // Choosing a section on a narrow screen closes the menu again.
+  document.getElementById('nav').addEventListener('click', (e) => {
+    if (e.target.closest('a')) {
+      document.getElementById('nav').classList.remove('open');
+      document.getElementById('nav-toggle').setAttribute('aria-expanded', 'false');
+    }
+  });
   // Keyboard: "/" focuses the page filter, "r" reloads the view, "u" opens upload in the browser, "," opens settings.
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || !app.me) return;
