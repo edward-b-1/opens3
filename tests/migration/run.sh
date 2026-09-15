@@ -216,7 +216,7 @@ copy_objects() {
   rclone lsd dst:
 }
 step "copy the objects with rclone sync --metadata" copy_objects
-step "copy the object tags (mc mirror does not)" py /migrate/copy_tags.py --src "$MINIO" --src-key "$MINIO_USER" --src-secret "$MINIO_PASSWORD" --dst "$OPENS3" --dst-key "$ROOT_USER" --dst-secret "$ROOT_PASSWORD"
+step "copy the object tags (rclone does not)" py /migrate/copy_tags.py --src "$MINIO" --src-key "$MINIO_USER" --src-secret "$MINIO_PASSWORD" --dst "$OPENS3" --dst-key "$ROOT_USER" --dst-secret "$ROOT_PASSWORD"
 export_identities() {
   mcsh '
 set -e
