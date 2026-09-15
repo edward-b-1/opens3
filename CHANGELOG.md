@@ -15,9 +15,10 @@ tagged tree.
 
 ### Fixed
 
-- Console: the sections menu button was visible on wide screens, where the
-  sections are always shown and it had nothing to toggle; it now appears
-  only on narrow screens, and choosing a section there closes the menu.
+- Console: the sections menu button did nothing on wide screens. It now
+  collapses and restores the sections sidebar, remembered per browser,
+  and on narrow screens opens the sections as a menu that closes on
+  choice.
 
 ### Added
 

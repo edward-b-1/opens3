@@ -123,16 +123,28 @@
   document.getElementById('settings-btn').addEventListener('click', openSettings);
   // Formats and page size need a re-render; density and theme are CSS only.
   window.addEventListener('settingschange', (e) => { if (e.detail.changed.some((k) => !['density', 'theme'].includes(k))) route(); });
-  document.getElementById('nav-toggle').addEventListener('click', (e) => {
-    const open = document.getElementById('nav').classList.toggle('open');
-    e.currentTarget.setAttribute('aria-expanded', String(open));
-  });
-  // Choosing a section on a narrow screen closes the menu again.
-  document.getElementById('nav').addEventListener('click', (e) => {
-    if (e.target.closest('a')) {
-      document.getElementById('nav').classList.remove('open');
-      document.getElementById('nav-toggle').setAttribute('aria-expanded', 'false');
+  // The sections sidebar: on wide screens the button collapses it to give
+  // the page the full width (remembered in this browser); on narrow
+  // screens it opens the sections as a menu that closes on choice.
+  const appEl = document.getElementById('app');
+  const toggle = document.getElementById('nav-toggle');
+  const narrow = () => window.matchMedia('(max-width: 800px)').matches;
+  const navShown = () => (narrow() ? appEl.classList.contains('nav-open') : !appEl.classList.contains('nav-collapsed'));
+  const syncToggle = () => toggle.setAttribute('aria-expanded', String(navShown()));
+  try { if (localStorage.getItem('opens3.nav') === 'collapsed') appEl.classList.add('nav-collapsed'); } catch (e) { /* no storage */ }
+  syncToggle();
+  toggle.addEventListener('click', () => {
+    if (narrow()) {
+      appEl.classList.toggle('nav-open');
+    } else {
+      const collapsed = appEl.classList.toggle('nav-collapsed');
+      try { localStorage.setItem('opens3.nav', collapsed ? 'collapsed' : 'shown'); } catch (e) { /* ignore */ }
     }
+    syncToggle();
+  });
+  window.matchMedia('(max-width: 800px)').addEventListener('change', syncToggle);
+  document.getElementById('nav').addEventListener('click', (e) => {
+    if (e.target.closest('a') && narrow()) { appEl.classList.remove('nav-open'); syncToggle(); }
   });
   // Keyboard: "/" focuses the page filter, "r" reloads the view, "u" opens upload in the browser, "," opens settings.
   document.addEventListener('keydown', (e) => {

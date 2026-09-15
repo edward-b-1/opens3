@@ -89,15 +89,15 @@ p { margin: 0 0 8px; }
 .sidebar a.active { background: var(--accent-soft); color: var(--accent); }
 .sidebar-foot { margin-top: auto; padding: 8px 12px; color: var(--muted); font-size: 12px; }
 .main { padding: 20px 24px 60px; min-width: 0; }
-/* The menu button exists for narrow screens only; .btn.nav-toggle outranks
-   the later .btn { display: inline-flex } rule, which used to show it
-   everywhere with nothing to toggle. */
-.btn.nav-toggle { display: none; }
+/* The menu button collapses and restores the sections sidebar. On wide
+   screens the sidebar is shown unless collapsed (remembered per browser);
+   on narrow screens it is hidden unless opened. */
+.app.nav-collapsed { grid-template-columns: 1fr; }
+.app.nav-collapsed .sidebar { display: none; }
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; }
-  .btn.nav-toggle { display: inline-flex; }
   .sidebar { display: none; border-right: 0; border-bottom: 1px solid var(--border); }
-  .sidebar.open { display: flex; }
+  .app.nav-open .sidebar { display: flex; }
   .main { padding: 14px; }
 }
 
