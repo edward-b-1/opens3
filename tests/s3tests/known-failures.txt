@@ -5,14 +5,6 @@
 # Test mechanics: the header the test tries to remove/override is (re)set by botocore when it signs the
 # request, so the server receives a valid request (all marked fails_on_rgw upstream)
 s3tests/functional/test_headers.py::test_object_create_bad_contentlength_none
-# AWS refuses tags on an anonymous browser upload granted only by a bucket ACL (s3:PutObjectTagging
-# is a policy permission; a published run of this suite against AWS records the test as failing),
-# and so does OpenS3 since 0.2.1.
-s3tests/functional/test_s3.py::test_post_object_tags_anonymous_request
-
-# Since the suite runs over TLS its client negotiates HTTP/2, whose framing drops an empty
-# Content-Length before the server sees it; over HTTP/1.1 the server answers 400 as the test expects.
-s3tests/functional/test_headers.py::test_object_create_bad_contentlength_empty
 s3tests/functional/test_headers.py::test_object_create_bad_authorization_empty
 s3tests/functional/test_headers.py::test_object_create_bad_authorization_none
 s3tests/functional/test_headers.py::test_bucket_create_bad_authorization_empty
@@ -25,6 +17,15 @@ s3tests/functional/test_headers.py::test_bucket_create_bad_date_none_aws2
 s3tests/functional/test_headers.py::test_object_create_date_and_amz_date
 s3tests/functional/test_headers.py::test_object_create_amz_date_and_no_date
 s3tests/functional/test_headers.py::test_object_create_bad_contentlength_mismatch_below_aws2
+
+# Since the suite runs over TLS its client negotiates HTTP/2, whose framing drops an empty
+# Content-Length before the server sees it; over HTTP/1.1 the server answers 400 as the test expects.
+s3tests/functional/test_headers.py::test_object_create_bad_contentlength_empty
+
+# AWS refuses tags on an anonymous browser upload granted only by a bucket ACL (s3:PutObjectTagging
+# is a policy permission; a published run of this suite against AWS records the test as failing),
+# and so does OpenS3 since 0.2.1.
+s3tests/functional/test_s3.py::test_post_object_tags_anonymous_request
 
 # Go net/http answers 417 itself for any Expect value other than 100-continue (AWS ignores the header)
 s3tests/functional/test_headers.py::test_object_create_bad_expect_mismatch
