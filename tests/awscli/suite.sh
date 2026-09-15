@@ -438,7 +438,8 @@ eq list-access-keys "$AK" -- aws iam list-access-keys --user-name "$USER" --quer
 eq user-s3-ls-empty "" -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws s3 ls
 fails user-get-object-denied AccessDenied -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws s3api get-object --bucket "$B" --key sha.txt user-denied.txt
 eq user-get-caller-identity "arn:aws:iam::$ACCOUNT:user/$USER" -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws sts get-caller-identity --query Arn --output text
-eq user-get-own-user "$USER" -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws iam get-user --query User.UserName --output text
+# Reading one's own user needs iam:GetUser, as on AWS; the readwrite policy does not grant it.
+fails user-get-own-user AccessDenied -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws iam get-user
 fails user-create-user-denied AccessDenied -- env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" aws iam create-user --user-name "awscli-mallory-$SUFFIX"
 ok update-access-key-inactive -- aws iam update-access-key --user-name "$USER" --access-key-id "$AK" --status Inactive
 eq list-access-keys-inactive Inactive -- aws iam list-access-keys --user-name "$USER" --query 'AccessKeyMetadata[0].Status' --output text
