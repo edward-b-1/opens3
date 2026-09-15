@@ -48,7 +48,8 @@ decision, not dropped; the next one to pick up is the audit log (item
   start without agreement.
 - **In-place MinIO data migration** (reading MinIO's on-disk format) is
   retired in favour of the API-based procedure in the manual, chapter 11,
-  with `examples/migrate/` and `make migration-test`. A future
+  with `examples/migrate/` and `make migration-test` (MinIO built from
+  source in Docker; nothing pulled from MinIO's registries). A future
   `opens3 migrate` command may wrap that procedure in one step (objects,
   tags, identities, verification); the on-disk converter is not planned.
 

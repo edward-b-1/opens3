@@ -16,10 +16,11 @@ tagged tree.
 ### Added
 
 - Manual chapter 11, "Migrating from MinIO": the API-based procedure
-  (`mc mirror`, identity export with `mc admin`, import with
+  (rclone for the objects, identity export with `mc admin`, import with
   `examples/migrate/import_identities.py`, tags with `copy_tags.py`,
-  verification with `opens3 fsck`), tested end to end against a real
-  MinIO in Docker by `make migration-test`.
+  verification with `opens3 fsck`), tested end to end by
+  `make migration-test` against a MinIO built from source at a pinned
+  release in Docker.
 
 ## [0.3.0] - 2026-09-14
 

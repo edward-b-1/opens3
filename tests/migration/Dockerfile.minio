@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1
+# MinIO and its client, built from source at pinned releases, for the
+# migration test. MinIO's project is archived and its images are gone
+# from Docker Hub, so the test does not depend on a registry keeping
+# them: the sources come from the Go module proxy, which keeps every
+# version it has ever served, at the tags below.
+FROM golang:1.27-alpine AS build
+ARG MINIO_VERSION=RELEASE.2025-04-22T22-12-26Z
+ARG MC_VERSION=RELEASE.2025-04-16T18-13-26Z
+ENV CGO_ENABLED=0 GOFLAGS=-trimpath
+RUN go install github.com/minio/minio@${MINIO_VERSION} \
+ && go install github.com/minio/mc@${MC_VERSION}
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=build /go/bin/minio /go/bin/mc /usr/local/bin/
+VOLUME /data
+ENTRYPOINT ["minio"]

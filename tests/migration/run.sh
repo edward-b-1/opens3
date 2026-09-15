@@ -4,14 +4,17 @@
 #
 #   tests/migration/run.sh
 #
-# A MinIO (pinned release, from quay.io) is seeded with buckets, objects
-# with metadata and tags, a versioned bucket, users, groups and policies.
-# OpenS3 is built from the repository Dockerfile. Then, exactly as the
-# manual says: `mc mirror --preserve` copies the objects, copy_tags.py
-# copies the tags, `mc admin` exports the identities and
-# import_identities.py recreates them, and a verifier compares the two
-# servers object by object and identity by identity. Finally
-# `opens3 fsck check --verify` inspects the result.
+# MinIO and its client are built from source at pinned releases
+# (Dockerfile.minio; nothing is pulled from a MinIO registry). The MinIO
+# is seeded with buckets, objects with metadata and tags, a versioned
+# bucket, users, groups and policies. OpenS3 is built from the repository
+# Dockerfile. Then, exactly as the manual says: rclone (a generic S3
+# client) copies the objects with their metadata, copy_tags.py copies the
+# tags, `mc admin` (the only MinIO-specific step, reading from MinIO)
+# exports the identities and import_identities.py (boto3) recreates them
+# in OpenS3, and a verifier compares the two servers object by object and
+# identity by identity. Finally `opens3 fsck check --verify` inspects the
+# result.
 #
 # Environment:
 #   MIGRATION_KEEP        set to 1 to keep the OpenS3 data directory
@@ -21,8 +24,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
-MINIO_IMAGE="quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z"
-MC_IMAGE="quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z"
+MINIO_IMAGE="opens3-migration-minio:local" # built by Dockerfile.minio (minio + mc)
+RCLONE_IMAGE="rclone/rclone:1.69.1"
 PY_IMAGE="python:3.13.15-slim"
 BOTO3_VERSION="1.43.93"
 IMAGE="opens3-migration-test:local"
@@ -100,18 +103,23 @@ finish() {
 }
 START=$(date +%s)
 
-# mc runs in its container against both servers through MC_HOST_* aliases.
-mc() {
-  docker run --rm --network host -v "$WORK:/work" \
-    -e MC_HOST_src="http://$MINIO_USER:$MINIO_PASSWORD@127.0.0.1:$MPORT" \
-    -e MC_HOST_dst="http://$ROOT_USER:$ROOT_PASSWORD@127.0.0.1:$OPORT" \
-    --entrypoint mc "$MC_IMAGE" "$@"
-}
+# mc (from the MinIO image) talks to MinIO through the MC_HOST_src alias;
+# it is used to seed MinIO and to export its identities, never against
+# OpenS3.
 mcsh() {
   docker run --rm --network host -v "$WORK:/work" \
     -e MC_HOST_src="http://$MINIO_USER:$MINIO_PASSWORD@127.0.0.1:$MPORT" \
-    -e MC_HOST_dst="http://$ROOT_USER:$ROOT_PASSWORD@127.0.0.1:$OPORT" \
-    --entrypoint sh "$MC_IMAGE" -c "$1"
+    --entrypoint sh "$MINIO_IMAGE" -c "$1"
+}
+# rclone, a generic S3 client, does the copy between the two servers.
+rclone() {
+  docker run --rm --network host --user "$UID_GID" -v "$WORK:/work" \
+    -e RCLONE_CONFIG_SRC_TYPE=s3 -e RCLONE_CONFIG_SRC_PROVIDER=Minio -e RCLONE_CONFIG_SRC_ENDPOINT="$MINIO" \
+    -e RCLONE_CONFIG_SRC_ACCESS_KEY_ID="$MINIO_USER" -e RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY="$MINIO_PASSWORD" \
+    -e RCLONE_CONFIG_DST_TYPE=s3 -e RCLONE_CONFIG_DST_PROVIDER=Other -e RCLONE_CONFIG_DST_ENDPOINT="$OPENS3" \
+    -e RCLONE_CONFIG_DST_ACCESS_KEY_ID="$ROOT_USER" -e RCLONE_CONFIG_DST_SECRET_ACCESS_KEY="$ROOT_PASSWORD" \
+    -e RCLONE_CONFIG_DST_FORCE_PATH_STYLE=true -e RCLONE_CONFIG_SRC_FORCE_PATH_STYLE=true \
+    "$RCLONE_IMAGE" "$@"
 }
 py() {
   docker run --rm --network host --user "$UID_GID" -v "$WORK:/work" -v "$REPO/examples/migrate:/migrate:ro" -v "$HERE:/suite:ro" -w /work \
@@ -121,15 +129,21 @@ py() {
 
 # --- images ---------------------------------------------------------------------
 build_image() { docker build -q -t "$IMAGE" "$REPO"; }
+build_minio() {
+  # Cached after the first build (several minutes: MinIO is large).
+  docker image inspect "$MINIO_IMAGE" >/dev/null 2>&1 && { echo "using cached $MINIO_IMAGE"; return 0; }
+  docker build -q -t "$MINIO_IMAGE" -f "$HERE/Dockerfile.minio" "$HERE"
+}
 pull_images() {
-  for i in "$MINIO_IMAGE" "$MC_IMAGE" "$PY_IMAGE"; do
+  for i in "$RCLONE_IMAGE" "$PY_IMAGE"; do
     docker image inspect "$i" >/dev/null 2>&1 || docker pull -q "$i"
   done
   docker run --rm --user "$UID_GID" -v "$WORK:/work" -e HOME=/work "$PY_IMAGE" \
     pip install -q --no-warn-script-location --target /work/py/site "boto3==$BOTO3_VERSION"
 }
 step "build the OpenS3 image" build_image
-step "pull MinIO $MINIO_IMAGE, mc, python with boto3" pull_images
+step "build MinIO and mc from source (Dockerfile.minio)" build_minio
+step "pull rclone and python with boto3" pull_images
 
 # --- servers --------------------------------------------------------------------
 start_minio() {
@@ -191,24 +205,17 @@ step "seed MinIO with buckets, objects, versions, users, groups and policies" se
 
 # --- the migration, as the manual describes it ------------------------------------
 copy_objects() {
-  mcsh '
-set -e
-# The mc image has no awk or sed: parse the bucket names from the JSON
-# listing with shell expansion.
-n=0
-mc ls src --json | while read -r line; do
-  k="${line#*\"key\":\"}"; k="${k%%\"*}"; b="${k%/}"
-  [ -n "$b" ] || continue
-  echo "== bucket $b"
-  mc mb --ignore-existing "dst/$b"
-  mc mirror --preserve --overwrite "src/$b" "dst/$b"
-done
-mc ls dst | tr -s " " | cut -d " " -f 4- | tr -d / > /work/buckets.txt
-[ -s /work/buckets.txt ] || { echo "no buckets on the destination"; exit 1; }
-cat /work/buckets.txt
-'
+  local buckets
+  buckets="$(rclone lsd src: | tr -s ' ' | cut -d ' ' -f 6)"
+  [ -n "$buckets" ] || { echo "no buckets listed on the source"; return 1; }
+  for b in $buckets; do
+    echo "== bucket $b"
+    rclone mkdir "dst:$b"
+    rclone sync --metadata "src:$b" "dst:$b"
+  done
+  rclone lsd dst:
 }
-step "copy the objects with mc mirror --preserve" copy_objects
+step "copy the objects with rclone sync --metadata" copy_objects
 step "copy the object tags (mc mirror does not)" py /migrate/copy_tags.py --src "$MINIO" --src-key "$MINIO_USER" --src-secret "$MINIO_PASSWORD" --dst "$OPENS3" --dst-key "$ROOT_USER" --dst-secret "$ROOT_PASSWORD"
 export_identities() {
   mcsh '

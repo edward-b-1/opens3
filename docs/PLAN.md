@@ -174,7 +174,8 @@ Status: `[ ]` planned, `[~]` in progress, `[x]` implemented and covered by tests
   and verified by `examples/python/encrypted_data.py` across rotate, retire,
   and moves between the key file and `OPENS3_MASTER_KEY`.
 - `make migration-test` — the MinIO migration procedure (manual chapter
-  11) against a pinned MinIO release in Docker: `mc mirror`, tag copy,
-  identity export and import, verification, `opens3 fsck --verify`.
+  11) against a MinIO built from source at a pinned release in Docker:
+  rclone copy, tag copy, identity export with `mc admin` and import with
+  boto3, verification, `opens3 fsck --verify`.
 - `go run ./tools/apicoverage` — regenerates `docs/API-COVERAGE.md`, the
   per-operation implementation matrix.

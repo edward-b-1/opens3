@@ -16,8 +16,8 @@ feature set in the open-source product. Plan and feature matrix: docs/PLAN.md.
   regenerates docs/API-COVERAGE.md after router changes.
 - Console: `make console-test` (ESLint + Playwright browser smoke test in
   Docker, about a minute) must be run after any change to internal/console/static.
-- Migration: `make migration-test` (Docker; a real MinIO from quay.io,
-  the manual's migration procedure end to end) after any change to
+- Migration: `make migration-test` (Docker; MinIO built from source at a
+  pinned release, the manual's migration procedure end to end) after any change to
   examples/migrate or the S3/IAM API surface MinIO tooling relies on.
 - Master key: `make rotation-test` (Docker; server + `opens3 master` from
   the Dockerfile, boto3 data via examples/python/encrypted_data.py, ~1 min)

@@ -8,42 +8,59 @@ API works for every MinIO version and layout, decrypts objects MinIO
 encrypted, and can be rehearsed and repeated. What it cannot carry is
 described at the end.
 
-Tools used: MinIO's own `mc` for the copy and the identity export, the
-two scripts in `examples/migrate/` for what no tool does, and the AWS
-CLI or `aws iam` for checks. `rclone sync --metadata` works in place of
-`mc mirror` if you prefer it.
+Tools used: rclone, a generic S3 client, for the copy; MinIO's own `mc`
+for one thing only, reading users and policies out of MinIO, which no
+generic client can do (`mc admin` is MinIO's private API; `mc`'s other
+commands are ordinary S3 and would work against OpenS3 too); the two
+scripts in `examples/migrate/`, which write to OpenS3 through the
+standard S3 and IAM APIs with boto3; and `aws` for checks. Nothing on the
+OpenS3 side needs MinIO tooling.
 
 ## 1. Stand OpenS3 up beside MinIO
 
 Install OpenS3 (chapter 1) on the same network, with its own data
-directory and root credentials, and give `mc` an alias for each server:
+directory and root credentials. Give rclone a remote for each server
+(`rclone config`, or the environment variables below, which is what the
+tested procedure uses):
 
 ```sh
-mc alias set minio  http://minio:9000  MINIO_ROOT_USER  MINIO_ROOT_PASSWORD
-mc alias set opens3 http://opens3:9000 OPENS3_ROOT_USER OPENS3_ROOT_PASSWORD
+export RCLONE_CONFIG_MINIO_TYPE=s3  RCLONE_CONFIG_MINIO_PROVIDER=Minio \
+       RCLONE_CONFIG_MINIO_ENDPOINT=http://minio:9000 \
+       RCLONE_CONFIG_MINIO_ACCESS_KEY_ID=MINIO_ROOT_USER RCLONE_CONFIG_MINIO_SECRET_ACCESS_KEY=MINIO_ROOT_PASSWORD
+export RCLONE_CONFIG_OPENS3_TYPE=s3 RCLONE_CONFIG_OPENS3_PROVIDER=Other RCLONE_CONFIG_OPENS3_FORCE_PATH_STYLE=true \
+       RCLONE_CONFIG_OPENS3_ENDPOINT=http://opens3:9000 \
+       RCLONE_CONFIG_OPENS3_ACCESS_KEY_ID=OPENS3_ROOT_USER RCLONE_CONFIG_OPENS3_SECRET_ACCESS_KEY=OPENS3_ROOT_PASSWORD
 ```
 
-With `--tls self-signed` on OpenS3, point `mc` at the certificate the
-server generated: `mc --insecure` is the quick way, and `MC_CA_BUNDLE` or
-importing `<root>/tls/tls.crt` into the trust store the proper one.
+and `mc` an alias for MinIO only:
+
+```sh
+mc alias set minio http://minio:9000 MINIO_ROOT_USER MINIO_ROOT_PASSWORD
+```
+
+With `--tls self-signed` on OpenS3, give rclone the certificate the
+server generated: `RCLONE_CA_CERT=<root>/tls/tls.crt`.
 
 ## 2. Copy the objects
 
 ```sh
-for b in $(mc ls minio | awk '{print $NF}' | tr -d /); do
-  mc mb --ignore-existing "opens3/$b"
-  mc mirror --preserve --overwrite "minio/$b" "opens3/$b"
+for b in $(rclone lsd minio: | awk '{print $NF}'); do
+  rclone mkdir "opens3:$b"
+  rclone sync --metadata "minio:$b" "opens3:$b"
 done
 ```
 
-`--preserve` keeps content type and user metadata (it also records
-MinIO's file attributes in a `mc-attrs` metadata entry, which is
-harmless). Large objects are re-uploaded as multipart uploads, so their
-ETags differ from MinIO's while the content is identical. The command is
-safe to repeat: a second run copies only what changed, which is how the
-final catch-up before the cutover is done.
+`--metadata` keeps content type and user metadata, and records the
+source object's modification time as `mtime` (and creation time as
+`btime`) user metadata, since Last-Modified itself cannot be set. Large
+objects are
+re-uploaded as multipart uploads, so their ETags differ from MinIO's
+while the content is identical. The command is safe to repeat: a second
+run copies only what changed, which is how the final catch-up before the
+cutover is done. (`mc mirror --preserve` does the same job if you would
+rather stay with `mc`; its S3 commands are not MinIO-specific.)
 
-Object tags are not copied by `mc mirror` or `rclone`. Copy them
+Object tags are not copied by rclone or `mc mirror`. Copy them
 afterwards:
 
 ```sh
@@ -93,11 +110,11 @@ these commands; create the equivalent service keys in OpenS3 by hand
 
 ## 4. Verify
 
-Compare counts and sizes per bucket on both sides:
+Compare the two sides:
 
 ```sh
-mc du minio/photos; mc du opens3/photos
-mc diff minio/photos opens3/photos      # lists any object that differs
+rclone check minio:photos opens3:photos    # lists any object that differs
+rclone size  opens3:photos
 ```
 
 Then, with OpenS3 stopped, `opens3 fsck check --verify --root DIR` reads
@@ -118,8 +135,8 @@ it.
   current version of each key is copied. Older versions can be copied as
   separate objects with `mc cp --version-id` if you need them, but not as
   versions of the same key.
-- **Timestamps.** Last-Modified becomes the copy time. Record the original
-  in user metadata if it matters.
+- **Timestamps.** Last-Modified becomes the copy time; the original is
+  in the `mtime` metadata rclone adds.
 - **Secret keys and console passwords**, as above.
 - **`mc admin` scripts.** OpenS3 does not serve MinIO's admin API. Manage
   identities with `aws iam` (chapter 3) or `opens3 admin` (chapter 8).
@@ -132,5 +149,5 @@ it.
   not hold the customer's key; clients must move those themselves.
 
 `tests/migration/run.sh` in the source repository runs this whole
-procedure against a real MinIO in Docker, so the steps above are tested
-against the MinIO release named in that script.
+procedure in Docker against a MinIO built from source at a pinned
+release, so the steps above are tested against that release.

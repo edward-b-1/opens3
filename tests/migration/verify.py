@@ -64,9 +64,13 @@ def main() -> None:
                 same = sh["ContentLength"] == dh["ContentLength"] and sha256_of(src, b, key) == sha256_of(dst, b, key)
                 check(same, f"{b}/{key}: {sh['ContentLength']} bytes, content identical")
                 check(sh.get("ContentType") == dh.get("ContentType"), f"{b}/{key}: content type {dh.get('ContentType')}")
-                sm = {k: v for k, v in sh.get("Metadata", {}).items() if not k.startswith("mc-attrs")}
-                dm = {k: v for k, v in dh.get("Metadata", {}).items() if not k.startswith("mc-attrs")}
+                # rclone records the source's timestamps as mtime/btime metadata
+                # (and mc mirror --preserve as mc-attrs); compare the rest.
+                added = ("mtime", "btime", "mc-attrs")
+                sm = {k: v for k, v in sh.get("Metadata", {}).items() if k not in added}
+                dm = {k: v for k, v in dh.get("Metadata", {}).items() if k not in added}
                 check(sm == dm, f"{b}/{key}: user metadata {dm}")
+                check("mtime" in dh.get("Metadata", {}), f"{b}/{key}: original modification time kept as mtime metadata")
                 st = sorted((t["Key"], t["Value"]) for t in src.get_object_tagging(Bucket=b, Key=key)["TagSet"])
                 dt = sorted((t["Key"], t["Value"]) for t in dst.get_object_tagging(Bucket=b, Key=key)["TagSet"])
                 check(st == dt, f"{b}/{key}: tags {dt}")
