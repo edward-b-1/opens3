@@ -13,6 +13,10 @@ tagged tree.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-15
+
+A console fix and the migration guide. No on-disk format or API change.
+
 ### Fixed
 
 - Console: the sections menu button did nothing on wide screens. It now
@@ -297,7 +301,8 @@ scenarios.
   targets other than webhooks (phase 2).
 - DSSE-KMS is accepted and treated as SSE-KMS (single layer).
 
-[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/edward-b-1/opens3/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/edward-b-1/opens3/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/edward-b-1/opens3/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/edward-b-1/opens3/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/edward-b-1/opens3/compare/v0.1.1...v0.2.0
