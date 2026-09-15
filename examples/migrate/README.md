@@ -10,5 +10,7 @@ itself is done with `mc mirror` or `rclone sync`.
 | `copy_tags.py` | Copies object tags, which `mc mirror` and `rclone` do not. |
 
 Both need Python 3.10+ and boto3 (`pip install boto3`, or `uv run` with
-the `pyproject.toml` here). `tests/migration/run.sh` at the repository
-root runs the whole procedure against a real MinIO in Docker.
+the `pyproject.toml` here). They work unchanged for Silo, the maintained
+MinIO fork (export with `mcli admin`). `tests/migration/run.sh` at the
+repository root runs the whole procedure in Docker against a MinIO, and
+with `MIGRATION_SOURCE=silo` against a Silo, each built from source.
